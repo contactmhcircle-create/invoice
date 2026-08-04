@@ -16,7 +16,10 @@ client requirement → worker vetting → compliance pack → shift allocation
 Runs as a single container with a local SQLite database. Multiple users with
 distinct roles, mandatory two-factor authentication, and access from any device.
 
-**To put it online at `invoice.cerviz.co.uk`, see [DEPLOYMENT.md](DEPLOYMENT.md).**
+**To put it online at `invoice.cerviz.co.uk`:**
+[FREE-HOSTING.md](FREE-HOSTING.md) for the £0 routes (Oracle Cloud Always Free,
+or a machine you already own behind a Cloudflare Tunnel), or
+[DEPLOYMENT.md](DEPLOYMENT.md) for managed hosting at about £3.50/month.
 
 ---
 

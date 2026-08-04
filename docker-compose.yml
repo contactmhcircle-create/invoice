@@ -1,0 +1,64 @@
+# Cerviz Back Office — zero-cost deployment.
+#
+# Two containers: the application, and Caddy in front of it to obtain and renew
+# a TLS certificate automatically from Let's Encrypt. Both are free.
+#
+# Runs on anything that has Docker: an Oracle Cloud Always Free machine, a spare
+# computer in the office, or a VPS later on. Nothing about the application
+# changes between them.
+#
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d
+#
+# If you are using Cloudflare Tunnel instead of opening ports, use
+# docker-compose.tunnel.yml — you do not need Caddy at all in that case.
+
+services:
+  app:
+    build: .
+    image: cerviz-back-office
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      PORT: "8080"
+      APP_SECRET: "${APP_SECRET:?APP_SECRET must be set - generate one with openssl rand -base64 48}"
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      OWNER_NAME: ${OWNER_NAME:-Owner}
+    volumes:
+      # The database, evidence files and backups live here. This directory is
+      # the business — back it up, and never delete it to "start clean".
+      - cerviz_data:/data
+    # Not published to the host: only Caddy may reach the application, so the
+    # plain-HTTP port is never exposed even if the firewall is misconfigured.
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Used by the Caddyfile. Set both in .env.
+      DOMAIN: "${DOMAIN:?DOMAIN must be set, e.g. invoice.cerviz.co.uk}"
+      ACME_EMAIL: "${ACME_EMAIL:?ACME_EMAIL must be set - Lets Encrypt uses it for expiry warnings}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data       # certificates — losing this means re-issuing them
+      - caddy_config:/config
+
+volumes:
+  cerviz_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,37 @@
+# TLS and reverse proxy for Cerviz Back Office.
+#
+# Caddy obtains a certificate from Let's Encrypt on first start and renews it
+# automatically for ever after. There is nothing to remember and nothing to pay.
+
+{$DOMAIN} {
+	tls {$ACME_EMAIL}
+
+	encode gzip zstd
+
+	# The application sets its own security headers; these are the ones that
+	# belong to the edge rather than the app.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Uploaded evidence (signed timesheet scans, licence photographs) can be
+	# larger than the default limit.
+	request_body {
+		max_size 30MB
+	}
+
+	reverse_proxy app:8080 {
+		# So the application logs and rate-limits against the real client
+		# address rather than Caddy's.
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Real-IP {remote_host}
+	}
+
+	log {
+		output file /data/access.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}

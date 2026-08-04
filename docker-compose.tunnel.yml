@@ -1,0 +1,49 @@
+# Cerviz Back Office behind a Cloudflare Tunnel.
+#
+# Use this instead of docker-compose.yml when you are running on a machine you
+# already own — an office PC, a Mac mini, a Raspberry Pi. The tunnel makes an
+# outbound connection to Cloudflare, so:
+#
+#   * no ports are opened on your router
+#   * no static IP address is needed
+#   * TLS is terminated by Cloudflare, so there is no certificate to manage
+#   * the machine's real address is never exposed
+#
+# Everything here is free on Cloudflare's free plan.
+#
+#   docker compose -f docker-compose.tunnel.yml up -d
+
+services:
+  app:
+    build: .
+    image: cerviz-back-office
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+      PORT: "8080"
+      APP_SECRET: "${APP_SECRET:?APP_SECRET must be set - generate one with openssl rand -base64 48}"
+      OWNER_EMAIL: ${OWNER_EMAIL:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      OWNER_NAME: ${OWNER_NAME:-Owner}
+    volumes:
+      - cerviz_data:/data
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    # The token comes from the Cloudflare dashboard when you create the tunnel.
+    command: tunnel --no-autoupdate run --token "${TUNNEL_TOKEN:?TUNNEL_TOKEN must be set - copy it from the Cloudflare Zero Trust dashboard}"
+
+volumes:
+  cerviz_data:
