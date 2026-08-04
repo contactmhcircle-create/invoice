@@ -28,11 +28,41 @@ export interface ResolvedRate {
   source: string;
 }
 
-/** Night work is 23:00–06:00 under the Working Time Regulations. */
+/** The night period under the Working Time Regulations: 23:00 to 06:00. */
+const NIGHT_START_MINUTE = 23 * 60;
+const NIGHT_END_MINUTE = 6 * 60;
+/** WTR treats someone as a night worker when they work at least 3 hours of it. */
+const NIGHT_QUALIFYING_MINUTES = 180;
+
+/**
+ * True when the shift spends at least three hours inside the 23:00–06:00 night
+ * period.
+ *
+ * Comparing start and end hours in isolation does not work: a 19:00–07:00 rota —
+ * the most common night pattern in security — starts before 22:00 and ends after
+ * 06:00, yet is entirely a night shift. The interval is therefore projected onto
+ * a minutes-from-midnight axis (with the end pushed past 1440 when it crosses
+ * midnight) and tested against both the night window that opens tonight and the
+ * one that closes this morning.
+ */
 export function isNightShift(startsAt: string, endsAt: string): boolean {
-  const startHour = new Date(startsAt).getHours();
-  const endHour = new Date(endsAt).getHours();
-  return startHour >= 22 || startHour < 6 || endHour <= 6;
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+
+  const startMinute = start.getHours() * 60 + start.getMinutes();
+  let endMinute = end.getHours() * 60 + end.getMinutes();
+  if (endMinute <= startMinute) endMinute += 1440; // crosses midnight
+
+  const overlap = (aFrom: number, aTo: number, bFrom: number, bTo: number) =>
+    Math.max(0, Math.min(aTo, bTo) - Math.max(aFrom, bFrom));
+
+  const minutesInNight =
+    // 23:00 tonight through 06:00 tomorrow
+    overlap(startMinute, endMinute, NIGHT_START_MINUTE, 1440 + NIGHT_END_MINUTE) +
+    // 23:00 last night through 06:00 this morning
+    overlap(startMinute, endMinute, NIGHT_START_MINUTE - 1440, NIGHT_END_MINUTE);
+
+  return minutesInNight >= NIGHT_QUALIFYING_MINUTES;
 }
 
 export function determineBand(

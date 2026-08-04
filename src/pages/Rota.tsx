@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, call, money, ukDate, todayIso, addDays, hours } from '../lib/api.js';
+// The one implementation of "how long is this shift" — it handles crossing
+// midnight, which a naive end-minus-start does not.
+import { workedMinutes } from '../../shared/dates.js';
 import { Loading, Empty, Modal, Status, Findings, Field, ErrorNote, Confirm } from '../components/ui.js';
 
 /**
@@ -84,8 +87,7 @@ export default function Rota({ onChange }: { onChange: () => void }) {
                 </thead>
                 <tbody>
                   {dayShifts.map((s) => {
-                    const mins = Math.max(0,
-                      (new Date(s.ends_at).getTime() - new Date(s.starts_at).getTime()) / 60000 - s.break_minutes);
+                    const mins = workedMinutes(s.starts_at, s.ends_at, s.break_minutes);
                     const charge = Math.round((mins * (s.charge_rate_pence ?? 0)) / 60);
                     const pay = Math.round((mins * (s.pay_rate_pence ?? 0)) / 60);
                     return (
