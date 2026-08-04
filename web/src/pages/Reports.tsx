@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, todayIso, addDays } from '../lib/api.js';
+import { useQuery, call, uploadTideStatement, openDocument, money, ukDate, todayIso, addDays } from '../lib/api.js';
 import { Loading, Empty, Field, ErrorNote } from '../components/ui.js';
 
 export default function Reports() {
   const [from, setFrom] = useState(addDays(todayIso(), -90));
   const [to, setTo] = useState(todayIso());
   const [error, setError] = useState<string | null>(null);
+  const [imported, setImported] = useState<any>(null);
 
   const { data: margin, loading } = useQuery<any>('reports:margin', { from, to });
   const { data: pl } = useQuery<any>('reports:profitAndLoss', { from, to });
@@ -27,13 +28,36 @@ export default function Reports() {
           </div>
         </div>
         <div className="btn-row">
-          <button className="btn" onClick={() => act(() => call('tide:import'))}>Import Tide CSV</button>
-          <button className="btn" onClick={() => act(() => call('export:salesCsv', { from, to }))}>Export sales</button>
-          <button className="btn" onClick={() => act(() => call('export:ledgerCsv', { from, to }))}>Export ledger</button>
+          <label className="btn">
+            Import Tide CSV
+            <input type="file" accept=".csv,text/csv" hidden onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              await act(async () => {
+                const result = await uploadTideStatement(file);
+                setImported(result);
+              });
+              e.target.value = '';
+            }} />
+          </label>
+          <button className="btn" onClick={() => openDocument(`/api/exports/sales.csv?from=${from}&to=${to}`)}>
+            Export sales
+          </button>
+          <button className="btn" onClick={() => openDocument(`/api/exports/ledger.csv?from=${from}&to=${to}`)}>
+            Export ledger
+          </button>
         </div>
       </div>
 
       <ErrorNote error={error} />
+
+      {imported && (
+        <div className="alert ok">
+          <strong>Tide statement imported</strong>
+          {imported.imported} transaction(s) added, {imported.skippedDuplicates} already present,
+          {' '}{imported.autoMatched} matched automatically to a document.
+        </div>
+      )}
 
       <div className="filters">
         <Field label="From"><input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>

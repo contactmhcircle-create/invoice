@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { freshDb, makeOrg, makeWorker, makeAssignment } from './helpers.js';
-import { newId } from '../electron/db/connection.js';
-import { createShift, allocateWorker } from '../electron/services/shifts.js';
-import { createTimesheet, populateFromShifts, approveTimesheet } from '../electron/services/timesheets.js';
-import { createInvoiceFromTimesheets, issueInvoice, recordPayment } from '../electron/services/invoices.js';
-import { setSupplyChain, derivePayeResponsibility, recordDueDiligence, dueDiligenceStatus } from '../electron/services/supplyChain.js';
-import { generateIntermediaryReport, intermediaryReportCsv, intermediaryObligations, upcomingFilings } from '../electron/services/statutory.js';
-import { parseTideCsv, importTideStatement, reconciliationView } from '../electron/services/tide.js';
-import { buildEnquiryPack, renderEnquiryPackHtml } from '../electron/services/enquiryPack.js';
-import { renderInvoiceHtml } from '../electron/services/invoiceDocument.js';
+import { newId } from '../core/db/connection.js';
+import { createShift, allocateWorker } from '../core/services/shifts.js';
+import { createTimesheet, populateFromShifts, approveTimesheet } from '../core/services/timesheets.js';
+import { createInvoiceFromTimesheets, issueInvoice, recordPayment } from '../core/services/invoices.js';
+import { setSupplyChain, derivePayeResponsibility, recordDueDiligence, dueDiligenceStatus } from '../core/services/supplyChain.js';
+import { generateIntermediaryReport, intermediaryReportCsv, intermediaryObligations, upcomingFilings } from '../core/services/statutory.js';
+import { parseTideCsv, importTideStatement, reconciliationView } from '../core/services/tide.js';
+import { buildEnquiryPack, renderEnquiryPackHtml } from '../core/services/enquiryPack.js';
+import { renderInvoiceHtml } from '../core/services/invoiceDocument.js';
 import { addDays, today, nowInstant } from '../shared/dates.js';
 
 function billedWeek(db: any) {

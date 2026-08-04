@@ -4,15 +4,15 @@
  *
  * This is a development tool. It is never run by the packaged application.
  */
-import { openDatabase, newId } from '../electron/db/connection.js';
+import { openDatabase, newId } from '../core/db/connection.js';
 import { nowInstant, today, addDays, weekEnding } from '../shared/dates.js';
-import { ensureScreeningRows, setScreeningElement, BS7858_ELEMENTS } from '../electron/services/compliance.js';
-import { setRate } from '../electron/services/rates.js';
-import { createShift, allocateWorker, markShiftStatus } from '../electron/services/shifts.js';
-import { createTimesheet, populateFromShifts, approveTimesheet } from '../electron/services/timesheets.js';
-import { createInvoiceFromTimesheets, issueInvoice, recordPayment } from '../electron/services/invoices.js';
-import { setSupplyChain, recordDueDiligence } from '../electron/services/supplyChain.js';
-import { createPurchaseInvoice, addPurchaseLine, matchPurchaseToTimesheets, recordSelfBill } from '../electron/services/purchases.js';
+import { ensureScreeningRows, setScreeningElement, BS7858_ELEMENTS } from '../core/services/compliance.js';
+import { setRate } from '../core/services/rates.js';
+import { createShift, allocateWorker, markShiftStatus } from '../core/services/shifts.js';
+import { createTimesheet, populateFromShifts, approveTimesheet } from '../core/services/timesheets.js';
+import { createInvoiceFromTimesheets, issueInvoice, recordPayment } from '../core/services/invoices.js';
+import { setSupplyChain, recordDueDiligence } from '../core/services/supplyChain.js';
+import { createPurchaseInvoice, addPurchaseLine, matchPurchaseToTimesheets, recordSelfBill } from '../core/services/purchases.js';
 
 const dbPath = process.argv[2] ?? './data/cerviz.sqlite';
 const db = openDatabase(dbPath);

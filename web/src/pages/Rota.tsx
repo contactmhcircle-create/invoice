@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, call, money, ukDate, todayIso, addDays, hours } from '../lib/api.js';
 // The one implementation of "how long is this shift" — it handles crossing
 // midnight, which a naive end-minus-start does not.
-import { workedMinutes } from '../../shared/dates.js';
+import { workedMinutes } from '../../../shared/dates.js';
 import { Loading, Empty, Modal, Status, Findings, Field, ErrorNote, Confirm } from '../components/ui.js';
 
 /**

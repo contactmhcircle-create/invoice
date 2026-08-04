@@ -15,11 +15,12 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["shared/*"],
-      "@/*": ["src/*"]
+      "@/*": ["web/src/*"]
     }
   },
-  "include": ["src", "shared", "electron"]
+  "include": ["web/src", "shared", "core", "server", "tests", "scripts"]
 }

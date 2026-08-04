@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, todayIso, addDays } from '../lib/api.js';
+import { useQuery, call, openDocument, money, ukDate, todayIso, addDays } from '../lib/api.js';
 import { Loading, Empty, Modal, Field, ErrorNote } from '../components/ui.js';
 
 /**
@@ -20,8 +20,10 @@ export default function Statutory({ onChange }: { onChange: () => void }) {
   const reload = () => { refreshFilings(); refreshInt(); onChange(); };
 
   const exportReport = async (p: any) => {
-    try { await call('statutory:exportIntermediaryCsv', { from: p.periodFrom, to: p.periodTo }); reload(); }
-    catch (e: any) { setError(e.message); }
+    try {
+      openDocument(`/api/exports/intermediaries.csv?from=${p.periodFrom}&to=${p.periodTo}`);
+      setTimeout(reload, 1500);
+    } catch (e: any) { setError(e.message); }
   };
 
   return (
@@ -209,7 +211,7 @@ function EnquiryPack({ onClose }: { onClose: () => void }) {
   };
 
   const exportPack = async () => {
-    try { await call('enquiryPack:export', { from, to }); }
+    try { openDocument(`/api/enquiry-pack?from=${from}&to=${to}`); }
     catch (e: any) { setError(e.message); }
   };
 
@@ -222,7 +224,7 @@ function EnquiryPack({ onClose }: { onClose: () => void }) {
         <>
           <button className="btn" onClick={onClose}>Close</button>
           <button className="btn" onClick={build} disabled={busy}>{busy ? 'Building…' : 'Build'}</button>
-          <button className="btn primary" disabled={!pack} onClick={exportPack}>Export PDF</button>
+          <button className="btn primary" disabled={!pack} onClick={exportPack}>Open full pack</button>
         </>
       }
     >

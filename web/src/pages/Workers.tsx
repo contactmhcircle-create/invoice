@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, todayIso, addDays } from '../lib/api.js';
+import { useQuery, call, uploadDocuments, money, ukDate, todayIso, addDays } from '../lib/api.js';
 import { Loading, Empty, Modal, Status, Findings, Field, MoneyInput, ErrorNote } from '../components/ui.js';
 
 const BS7858_LABELS: Record<string, string> = {
@@ -108,8 +108,9 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
     catch (e: any) { setError(e.message); }
   };
 
-  const attach = async (category: string) => {
-    try { await call('documents:attach', { entityType: 'worker', entityId: id, category }); reload(); }
+  const attach = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try { await uploadDocuments('worker', id, 'worker_document', files); reload(); }
     catch (e: any) { setError(e.message); }
   };
 
@@ -131,7 +132,10 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
         </div>
         <div className="btn-row">
           <button className="btn small" onClick={issueKid}>Issue KID</button>
-          <button className="btn small" onClick={() => attach('worker_document')}>Attach document</button>
+          <label className="btn small">
+            Attach document
+            <input type="file" multiple hidden onChange={(e) => attach(e.target.files)} />
+          </label>
         </div>
       </div>
 

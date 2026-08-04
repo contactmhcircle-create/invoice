@@ -212,20 +212,12 @@ export default function Settings({ onChange }: { onChange: () => void }) {
             <div className="card-body tight">
               {!backups?.length ? <Empty>No backups yet.</Empty> : (
                 <table>
-                  <thead><tr><th>Taken</th><th className="num">Size</th><th></th></tr></thead>
+                  <thead><tr><th>Taken</th><th className="num">Size</th></tr></thead>
                   <tbody>
                     {backups.slice(0, 12).map((b) => (
                       <tr key={b.name}>
                         <td>{new Date(b.takenAt).toLocaleString('en-GB')}</td>
                         <td className="num">{(b.sizeBytes / 1024 / 1024).toFixed(1)} MB</td>
-                        <td>
-                          <button
-                            className="btn small"
-                            onClick={() => call('backup:restore', { path: b.path })}
-                          >
-                            Restore
-                          </button>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -233,8 +225,10 @@ export default function Settings({ onChange }: { onChange: () => void }) {
               )}
             </div>
             <div className="chain-note">
-              A backup runs automatically on every launch and 30 are kept. Restoring copies the current
-              database aside first, so a restore is itself reversible.
+              A backup runs when the server starts, once a day after that, and whenever you press the
+              button — the most recent 30 are kept, each with a checksum. Restoring is deliberately not
+              available from this screen: replacing the live database is a server operation that should be
+              done knowingly, from the deployment guide, rather than by a mis-click in a browser.
             </div>
           </div>
 

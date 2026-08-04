@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { freshDb, makeOrg, makeWorker, makeAssignment } from './helpers.js';
-import { isNightShift, determineBand, setRate, resolveRate } from '../electron/services/rates.js';
-import { createShift, allocateWorker, shiftValue } from '../electron/services/shifts.js';
+import { isNightShift, determineBand, setRate, resolveRate } from '../core/services/rates.js';
+import { createShift, allocateWorker, shiftValue } from '../core/services/shifts.js';
 import { workedMinutes } from '../shared/dates.js';
 import { addDays, today } from '../shared/dates.js';
 

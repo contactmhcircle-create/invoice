@@ -1,7 +1,7 @@
 # Cerviz Back Office
 
-Desktop staffing back-office for **Cerviz Ltd** — a UK sub-contractor supplying
-SIA-licensed security officers into other agencies and end clients.
+Web-based staffing back-office for **Cerviz Ltd** — a UK sub-contractor
+supplying SIA-licensed security officers into other agencies and end clients.
 
 Invoicing is the last step, not the whole app. A staffing invoice can only be
 correct if you know who worked, on which site, for how many hours, at which rate,
@@ -13,58 +13,89 @@ client requirement → worker vetting → compliance pack → shift allocation
     → timesheet (signed on site) → invoice → umbrella cost → margin
 ```
 
-Runs offline on Windows, macOS and Linux with a local SQLite database.
+Runs as a single container with a local SQLite database. Multiple users with
+distinct roles, mandatory two-factor authentication, and access from any device.
+
+**To put it online at `invoice.cerviz.co.uk`, see [DEPLOYMENT.md](DEPLOYMENT.md).**
 
 ---
 
-## Getting started
+## Running it locally
 
 ```bash
 npm install
-npm start          # builds, rebuilds the native module for Electron, launches
+
+# One terminal: the API
+APP_SECRET=$(openssl rand -base64 48) \
+OWNER_EMAIL=you@cerviz.co.uk \
+OWNER_PASSWORD=a-long-enough-password \
+npm run dev:api
+
+# Another: the interface, proxying to it
+npm run dev:web
 ```
 
-Other commands:
+Then open <http://localhost:5173>.
+
+Optionally load a realistic dataset first — 4 organisations, 7 officers, 200
+shifts, 26 timesheets, 14 invoices:
+
+```bash
+npm run seed:demo -- ./data/cerviz.sqlite
+```
 
 | Command | What it does |
 |---|---|
-| `npm test` | Runs the test suite (51 tests) against the real schema in memory |
-| `npm run dev` | Vite dev server with hot reload |
-| `npm run typecheck` | TypeScript across renderer, main process and shared code |
-| `npm run seed:demo -- ./data/cerviz.sqlite` | Builds a realistic demo dataset |
-| `npm run dist:win` / `dist:mac` / `dist:linux` | Packages an installer |
-
-### A note on `better-sqlite3`
-
-It is a native module, so it must be compiled against whichever runtime will
-load it — Electron for the app, Node for tests and scripts. The two ABIs are not
-interchangeable, and switching between them produces a
-`NODE_MODULE_VERSION` error.
-
-The npm scripts handle this: `test` and `seed:demo` rebuild for Node first,
-`start`, `dev` and `dist` rebuild for Electron. If you hit the error, run
-`npm run rebuild:node` or `npm run rebuild:electron` for whichever you need.
+| `npm test` | 109 tests against the real schema in memory |
+| `npm run typecheck` | TypeScript across core, server, web and tests |
+| `npm run build` | Builds the interface and bundles the server |
+| `npm start` | Runs the built server |
+| `npm run seed:demo -- <path>` | Builds the demo dataset |
 
 ---
 
-## First run
+## How it is put together
 
-Open **Settings** and fill in:
+```
+core/     Domain logic — compliance, rates, timesheets, invoicing, VAT,
+          supply chain, enquiry pack. Knows nothing about HTTP or React.
+server/   Fastify API, authentication, roles, the operation registry.
+web/      React interface.
+shared/   Money and date helpers used by both sides.
+```
 
-1. **Company** — registered name, company number, registered office, and date of
-   incorporation. The company number and registered office must appear on every
-   invoice, and the incorporation date generates the Companies House filing
-   calendar.
-2. **Bank & invoices** — the Tide account details that appear in the payment box.
-3. **Minimum wage** — seeded with the April 2025 and April 2026 rates. **Check
-   them against GOV.UK and update every April.** A pay rate below the minimum
-   blocks allocation outright.
+The split matters: `core/` is where the rules that must be right live, and it is
+where the tests point. The server is a thin layer that authenticates a request,
+checks a capability, and calls into it.
 
-VAT is off by default and correct that way until Cerviz registers.
+---
+
+## Accounts and roles
+
+Every account needs a password **and** an authenticator app — no exceptions, for
+any role. A new user is made to change their password and set up two-factor
+before reaching any data.
+
+| Role | Can do | Cannot |
+|---|---|---|
+| **Owner** | Everything, including managing users | — |
+| **Compliance & vetting** | Workers, licences, right to work, BS 7858, and *sees personal data* | Rates, margins, invoices |
+| **Scheduler** | Rotas, allocation, timesheet entry | Personal data, rates, approving timesheets |
+| **Finance** | Invoicing, purchases, reports, statutory returns | Worker personal data |
+| **Read only** | Views everything except personal data | Any change |
+
+Permissions are enforced on the server, per operation. Hiding a button is
+presentation; the restriction is real either way. Worker National Insurance
+numbers, dates of birth, addresses and bank details are **stripped from the
+response** for roles without `workers.pii` — a scheduler cannot see them even by
+reading the network traffic.
+
+Changing someone's role or suspending them ends their sessions immediately.
 
 ---
 
 ## What the app enforces
+
 
 These are hard blocks. A worker who fails any of them cannot be allocated to a
 shift — the rota refuses rather than warning and letting it through, because a
@@ -207,10 +238,12 @@ self-contained enquiry pack; it reconciles *to* Tide rather than competing.
 
 ## Backups
 
-A backup runs on every launch and 30 are kept, each hashed. Restoring copies the
-current database aside first, so a restore is itself reversible. Everything the
-business depends on lives in one directory (**Help → Open data folder**), so
-backing up the business means copying one folder.
+A backup runs when the server starts, once a day after that, and whenever you
+press the button in Settings — the most recent 30 are kept, each hashed.
+Everything the business depends on lives in one directory (`DATA_DIR`), so
+backing up the business means copying one folder. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for continuous off-site backups and for how to
+restore.
 
 ---
 

@@ -1,0 +1,11 @@
+node_modules
+web-dist
+server-dist
+data
+release
+screens
+*.log
+.git
+.github
+tests
+scripts/browser-check.ts

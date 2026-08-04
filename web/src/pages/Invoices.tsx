@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, hours } from '../lib/api.js';
+import { useQuery, call, openDocument, money, ukDate, hours } from '../lib/api.js';
 import { Loading, Empty, Modal, Status, Field, ErrorNote, Confirm } from '../components/ui.js';
 
 export default function Invoices({ onChange }: { onChange: () => void }) {
@@ -124,7 +124,9 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
       footer={
         <>
           <button className="btn" onClick={onClose}>Close</button>
-          <button className="btn" onClick={() => act(() => call('invoices:pdf', { id }))}>Save PDF</button>
+          <button className="btn" onClick={() => openDocument(`/api/invoices/${id}/document`)}>
+            Print / save PDF
+          </button>
           {inv.status === 'draft' && (
             <button className="btn primary" onClick={() => act(() => call('invoices:issue', { id }))}>
               Issue invoice

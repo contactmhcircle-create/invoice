@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { freshDb, makeOrg, makeWorker, makeAssignment } from './helpers.js';
-import { newId } from '../electron/db/connection.js';
+import { newId } from '../core/db/connection.js';
 import {
   checkWorker,
   setScreeningElement,
@@ -9,8 +9,8 @@ import {
   checkNmw,
   nmwBandFor,
   holidayAccrualPence,
-} from '../electron/services/compliance.js';
-import { createShift, allocateWorker, checkAllocation, eligibleWorkers } from '../electron/services/shifts.js';
+} from '../core/services/compliance.js';
+import { createShift, allocateWorker, checkAllocation, eligibleWorkers } from '../core/services/shifts.js';
 import { addDays, today, nowInstant } from '../shared/dates.js';
 
 describe('SIA licence expiry blocking', () => {

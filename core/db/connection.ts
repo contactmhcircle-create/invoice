@@ -29,14 +29,28 @@ export function openDatabase(filename: string): Db {
   return db;
 }
 
+/**
+ * Migrations are plain .sql files, so they have to be findable both when running
+ * from source and from a bundle where `here` is the output directory. MIGRATIONS_DIR
+ * overrides everything, which is what the container image sets.
+ */
 function migrationsDir(): string {
-  // Works from source (electron/db/migrations) and from the built output.
   const candidates = [
-    join(here, 'migrations'),
-    join(here, '..', '..', 'electron', 'db', 'migrations'),
-    join(process.cwd(), 'electron', 'db', 'migrations'),
-  ];
-  return candidates.find((c) => existsSync(c)) ?? candidates[0];
+    process.env.MIGRATIONS_DIR,
+    join(here, 'migrations'),                              // running from source
+    join(here, '..', 'migrations'),                        // bundled beside the output
+    join(process.cwd(), 'core', 'db', 'migrations'),       // from the project root
+    join(process.cwd(), 'migrations'),                     // container working directory
+  ].filter(Boolean) as string[];
+
+  const found = candidates.find((c) => existsSync(c));
+  if (!found) {
+    throw new Error(
+      `Cannot find the database migrations. Looked in:\n${candidates.map((c) => `  ${c}`).join('\n')}\n` +
+        'Set MIGRATIONS_DIR to the directory holding the .sql files.',
+    );
+  }
+  return found;
 }
 
 export function migrate(db: Db): void {

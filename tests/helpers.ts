@@ -1,8 +1,8 @@
-import { openDatabase, newId } from '../electron/db/connection.js';
-import type { Db } from '../electron/db/connection.js';
+import { openDatabase, newId } from '../core/db/connection.js';
+import type { Db } from '../core/db/connection.js';
 import { nowInstant, addDays, today } from '../shared/dates.js';
-import { ensureScreeningRows, setScreeningElement, BS7858_ELEMENTS } from '../electron/services/compliance.js';
-import { setRate } from '../electron/services/rates.js';
+import { ensureScreeningRows, setScreeningElement, BS7858_ELEMENTS } from '../core/services/compliance.js';
+import { setRate } from '../core/services/rates.js';
 
 /**
  * Test fixtures build against the real schema in memory, so every trigger and

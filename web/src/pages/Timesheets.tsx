@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, todayIso, hours } from '../lib/api.js';
+import { useQuery, call, uploadDocuments, money, ukDate, todayIso, hours } from '../lib/api.js';
 import { Loading, Empty, Modal, Status, Field, ErrorNote, Confirm } from '../components/ui.js';
 
 /**
@@ -107,8 +107,9 @@ function TimesheetDetail({ id, onClose, onChange }: { id: string; onClose: () =>
     } catch (e: any) { setError(e.message); }
   };
 
-  const attach = async () => {
-    try { await call('documents:attach', { entityType: 'timesheet', entityId: id, category: 'signed_timesheet' }); reload(); }
+  const attach = async (files: FileList | null) => {
+    if (!files?.length) return;
+    try { await uploadDocuments('timesheet', id, 'signed_timesheet', files); reload(); }
     catch (e: any) { setError(e.message); }
   };
 
@@ -163,7 +164,11 @@ function TimesheetDetail({ id, onClose, onChange }: { id: string; onClose: () =>
 
       <div className="btn-row" style={{ marginBottom: 14 }}>
         {editable && <button className="btn small" onClick={populate}>Pull hours from rota</button>}
-        <button className="btn small" onClick={attach}>Attach signed scan</button>
+        <label className="btn small">
+          Attach signed scan
+          <input type="file" accept="image/*,application/pdf" capture="environment" hidden
+                 onChange={(e) => attach(e.target.files)} />
+        </label>
       </div>
 
       {t.lines?.length ? (

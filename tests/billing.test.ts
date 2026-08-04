@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { freshDb, makeOrg, makeWorker, makeAssignment } from './helpers.js';
-import { newId } from '../electron/db/connection.js';
-import { createShift, allocateWorker, shiftValue } from '../electron/services/shifts.js';
+import { newId } from '../core/db/connection.js';
+import { createShift, allocateWorker, shiftValue } from '../core/services/shifts.js';
 import {
   createTimesheet,
   populateFromShifts,
   approveTimesheet,
   unbilledTimesheets,
-} from '../electron/services/timesheets.js';
+} from '../core/services/timesheets.js';
 import {
   createInvoiceFromTimesheets,
   issueInvoice,
@@ -18,12 +18,12 @@ import {
   statutoryInterest,
   agedDebtors,
   invoiceWithDetail,
-} from '../electron/services/invoices.js';
-import { auditSequence } from '../electron/services/numbering.js';
-import { verifyAuditChain } from '../electron/db/audit.js';
-import { trialBalance, profitAndLoss } from '../electron/services/ledger.js';
-import { recordSelfBill, reconcileSelfBill, createPurchaseInvoice, addPurchaseLine, matchPurchaseToTimesheets, marginReport } from '../electron/services/purchases.js';
-import { thresholdStatus } from '../electron/services/vat.js';
+} from '../core/services/invoices.js';
+import { auditSequence } from '../core/services/numbering.js';
+import { verifyAuditChain } from '../core/db/audit.js';
+import { trialBalance, profitAndLoss } from '../core/services/ledger.js';
+import { recordSelfBill, reconcileSelfBill, createPurchaseInvoice, addPurchaseLine, matchPurchaseToTimesheets, marginReport } from '../core/services/purchases.js';
+import { thresholdStatus } from '../core/services/vat.js';
 import { addDays, today, weekEnding, nowInstant } from '../shared/dates.js';
 
 /** Builds a worked, approved timesheet ready to invoice. */
