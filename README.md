@@ -16,10 +16,17 @@ client requirement → worker vetting → compliance pack → shift allocation
 Runs as a single container with a local SQLite database. Multiple users with
 distinct roles, mandatory two-factor authentication, and access from any device.
 
-**To put it online at `invoice.cerviz.co.uk`:**
-[FREE-HOSTING.md](FREE-HOSTING.md) for the £0 routes (Oracle Cloud Always Free,
-or a machine you already own behind a Cloudflare Tunnel), or
-[DEPLOYMENT.md](DEPLOYMENT.md) for managed hosting at about £3.50/month.
+**To put it online at `invoice.cerviz.co.uk`, see
+[HOSTINGER-VPS.md](HOSTINGER-VPS.md)** — one script, about 30 minutes, roughly
+£5/month, everything staying with Hostinger.
+
+Alternatives: [FREE-HOSTING.md](FREE-HOSTING.md) for £0 routes (Oracle Cloud
+Always Free, or a machine you already own behind a Cloudflare Tunnel), or
+[DEPLOYMENT.md](DEPLOYMENT.md) for Fly.io.
+
+> Hostinger's *shared* plans run PHP and MySQL and cannot run this application —
+> it needs a persistent Node.js process. A VPS is the same provider and the same
+> bill, and runs it unchanged.
 
 ---
 
