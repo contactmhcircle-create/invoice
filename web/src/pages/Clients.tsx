@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, call, money, ukDate, todayIso } from '../lib/api.js';
-import { Loading, Empty, Modal, Status, Field, MoneyInput, ErrorNote } from '../components/ui.js';
+import { Loading, Empty, Modal, Status, Field, MoneyInput, ErrorNote, Confirm } from '../components/ui.js';
 
 const CHAIN_ROLES = [
   ['end_client', 'End client — whose site the officers work on'],
@@ -110,13 +110,24 @@ function OrgDetail({ id, onClose, onChange }: { id: string; onClose: () => void;
   const { data: org, loading, refresh } = useQuery<any>('orgs:get', { id });
   const [error, setError] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (loading || !org) return <Modal title="Organisation" onClose={onClose}><Loading /></Modal>;
 
   const dd = org.dueDiligence;
 
   return (
-    <Modal title={org.name} onClose={onClose} wide>
+    <Modal
+      title={org.name}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Close</button>
+          <button className="btn danger" onClick={() => setDeleting(true)}>Delete</button>
+        </>
+      }
+    >
       <ErrorNote error={error} />
 
       <div className={`alert ${dd.complete ? 'ok' : dd.failed.length ? 'danger' : 'warn'}`}>
@@ -179,6 +190,20 @@ function OrgDetail({ id, onClose, onChange }: { id: string; onClose: () => void;
           onDone={() => { setChecking(false); refresh(); onChange(); }}
         />
       )}
+      {deleting && (
+        <Confirm
+          title={`Delete ${org.name}`}
+          message="An organisation with nothing linked to it — no invoices, assignments, workers or payments — is deleted outright, with a snapshot kept in the audit trail. If anything is on record the deletion is refused, and the right move is to set it to closed instead."
+          confirmLabel="Delete organisation"
+          danger
+          onCancel={() => setDeleting(false)}
+          onConfirm={async () => {
+            setDeleting(false);
+            try { await call('orgs:delete', { id }); onChange(); onClose(); }
+            catch (e: any) { setError(e.message); }
+          }}
+        />
+      )}
     </Modal>
   );
 }
@@ -239,6 +264,7 @@ function AssignmentDetail({ id, onClose, onChange }: { id: string; onClose: () =
   const { data: a, loading, refresh } = useQuery<any>('assignments:get', { id });
   const { data: orgs } = useQuery<any[]>('orgs:list');
   const [editingChain, setEditingChain] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (loading || !a) return <Modal title="Assignment" onClose={onClose}><Loading /></Modal>;
@@ -246,7 +272,17 @@ function AssignmentDetail({ id, onClose, onChange }: { id: string; onClose: () =
   const paye = a.supplyChain?.payeResponsibility;
 
   return (
-    <Modal title={a.title} onClose={onClose} wide>
+    <Modal
+      title={a.title}
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Close</button>
+          <button className="btn danger" onClick={() => setDeleting(true)}>Delete</button>
+        </>
+      }
+    >
       <ErrorNote error={error} />
 
       <div className="row-between" style={{ marginBottom: 14 }}>
@@ -347,6 +383,20 @@ function AssignmentDetail({ id, onClose, onChange }: { id: string; onClose: () =
           existing={a.supplyChain?.links ?? []}
           onClose={() => setEditingChain(false)}
           onDone={() => { setEditingChain(false); refresh(); onChange(); }}
+        />
+      )}
+      {deleting && (
+        <Confirm
+          title={`Delete ${a.title}`}
+          message="An assignment with no shifts, timesheets or invoices behind it is deleted outright, with a snapshot kept in the audit trail. Once work has been rostered against it the deletion is refused — set it to ended instead."
+          confirmLabel="Delete assignment"
+          danger
+          onCancel={() => setDeleting(false)}
+          onConfirm={async () => {
+            setDeleting(false);
+            try { await call('assignments:delete', { id }); onChange(); onClose(); }
+            catch (e: any) { setError(e.message); }
+          }}
         />
       )}
     </Modal>

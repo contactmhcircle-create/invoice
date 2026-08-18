@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, call, uploadDocuments, money, ukDate, todayIso, addDays } from '../lib/api.js';
-import { Loading, Empty, Modal, Status, Findings, Field, MoneyInput, ErrorNote } from '../components/ui.js';
+import { Loading, Empty, Modal, Status, Findings, Field, MoneyInput, ErrorNote, Confirm } from '../components/ui.js';
 
 const BS7858_LABELS: Record<string, string> = {
   identity: 'Identity verification',
@@ -93,6 +93,7 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
   const [error, setError] = useState<string | null>(null);
   const [addingLicence, setAddingLicence] = useState(false);
   const [addingRtw, setAddingRtw] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const reload = () => { refresh(); onChange(); };
 
@@ -152,8 +153,24 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
             Attach document
             <input type="file" multiple hidden onChange={(e) => attach(e.target.files)} />
           </label>
+          <button className="btn small danger" onClick={() => setDeleting(true)}>Delete</button>
         </div>
       </div>
+
+      {deleting && (
+        <Confirm
+          title={`Delete ${w.first_name} ${w.last_name}`}
+          message="A worker who never worked a shift is deleted outright, together with their vetting records, and a snapshot is kept in the audit trail. Once they have shifts or timesheets on record the deletion is refused — mark them as left instead."
+          confirmLabel="Delete worker"
+          danger
+          onCancel={() => setDeleting(false)}
+          onConfirm={async () => {
+            setDeleting(false);
+            try { await call('workers:delete', { id }); onChange(); onClose(); }
+            catch (e: any) { setError(e.message); }
+          }}
+        />
+      )}
 
       {w.status === 'onboarding' && w.compliance?.placeable && (
         <div className="alert ok">

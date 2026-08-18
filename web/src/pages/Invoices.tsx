@@ -118,6 +118,7 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
   const [paying, setPaying] = useState(false);
   const [crediting, setCrediting] = useState(false);
   const [editingHeader, setEditingHeader] = useState(false);
+  const [deletingDraft, setDeletingDraft] = useState(false);
 
   const reload = () => { refresh(); onChange(); };
 
@@ -145,9 +146,12 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
             CSV
           </button>
           {inv.status === 'draft' && (
-            <button className="btn primary" onClick={() => act(() => call('invoices:issue', { id }))}>
-              Issue invoice
-            </button>
+            <>
+              <button className="btn danger" onClick={() => setDeletingDraft(true)}>Delete draft</button>
+              <button className="btn primary" onClick={() => act(() => call('invoices:issue', { id }))}>
+                Issue invoice
+              </button>
+            </>
           )}
           {['issued', 'part_paid', 'overdue'].includes(inv.status) && (
             <>
@@ -293,6 +297,20 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
           invoice={inv}
           onClose={() => setEditingHeader(false)}
           onDone={() => { setEditingHeader(false); reload(); }}
+        />
+      )}
+      {deletingDraft && (
+        <Confirm
+          title="Delete this draft"
+          message="A draft has no invoice number yet, so deleting it leaves no hole in the series — a snapshot stays in the audit trail. Any timesheets on it return to the unbilled list. Issued invoices can never be deleted, only voided."
+          confirmLabel="Delete draft"
+          danger
+          onCancel={() => setDeletingDraft(false)}
+          onConfirm={async () => {
+            setDeletingDraft(false);
+            try { await call('invoices:deleteDraft', { id }); onChange(); onClose(); }
+            catch (e: any) { setError(e.message); }
+          }}
         />
       )}
     </Modal>

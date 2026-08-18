@@ -15,6 +15,7 @@ import * as vat from '../core/services/vat.js';
 import * as numbering from '../core/services/numbering.js';
 import * as tide from '../core/services/tide.js';
 import * as documents from '../core/services/documents.js';
+import * as deletion from '../core/services/deletion.js';
 import { buildEnquiryPack } from '../core/services/enquiryPack.js';
 import { backupDatabase, listBackups } from '../core/services/backup.js';
 import { join as joinPath } from 'node:path';
@@ -260,6 +261,16 @@ const ops: Record<string, Operation> = {
       supplyChain.recordDueDiligence(db, { ...payload, performedBy: payload.performedBy ?? user.name }),
   },
 
+  'orgs:delete': {
+    capability: 'clients.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteOrganisation(db, id, user.id); return true; },
+  },
+
+  'sites:delete': {
+    capability: 'clients.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteSite(db, id, user.id); return true; },
+  },
+
   'sites:save': {
     capability: 'clients.write',
     handler: ({ db }, payload) => {
@@ -388,6 +399,11 @@ const ops: Record<string, Operation> = {
       });
       return id;
     },
+  },
+
+  'workers:delete': {
+    capability: 'workers.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteWorker(db, id, user.id); return true; },
   },
 
   'workers:addLicence': {
@@ -532,6 +548,11 @@ const ops: Record<string, Operation> = {
     },
   },
 
+  'assignments:delete': {
+    capability: 'clients.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteAssignment(db, id, user.id); return true; },
+  },
+
   'assignments:save': {
     capability: 'clients.write',
     handler: ({ db, user }, payload) => {
@@ -620,6 +641,10 @@ const ops: Record<string, Operation> = {
   },
 
   'shifts:create': { capability: 'rota.write', handler: ({ db }, payload) => shifts.createShift(db, payload) },
+  'shifts:delete': {
+    capability: 'rota.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteShift(db, id, user.id); return true; },
+  },
 
   'shifts:createSeries': {
     capability: 'rota.write',
@@ -721,6 +746,10 @@ const ops: Record<string, Operation> = {
   },
 
   'timesheets:reopen': { capability: 'timesheets.approve', handler: ({ db }, { id, reason }) => { timesheets.reopenTimesheet(db, id, reason); return true; } },
+  'timesheets:delete': {
+    capability: 'timesheets.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteTimesheet(db, id, user.id); return true; },
+  },
   'timesheets:dispute': { capability: 'timesheets.write', handler: ({ db }, { id, reason }) => { timesheets.disputeTimesheet(db, id, reason); return true; } },
   'timesheets:unbilled': { capability: 'timesheets.read', readOnly: true, handler: ({ db }, payload = {}) => timesheets.unbilledTimesheets(db, payload.clientOrgId) },
 
@@ -745,6 +774,10 @@ const ops: Record<string, Operation> = {
   'invoices:updateLine': { capability: 'invoices.write', handler: ({ db }, { invoiceId, lineId, changes }) => { invoices.updateInvoiceLine(db, invoiceId, lineId, changes); return true; } },
   'invoices:removeLine': { capability: 'invoices.write', handler: ({ db }, { invoiceId, lineId }) => { invoices.removeInvoiceLine(db, invoiceId, lineId); return true; } },
   'invoices:updateDraft': { capability: 'invoices.write', handler: ({ db }, { id, changes }) => { invoices.updateDraftInvoice(db, id, changes); return invoices.invoiceWithDetail(db, id); } },
+  'invoices:deleteDraft': {
+    capability: 'invoices.write',
+    handler: ({ db, user }, { id }) => { deletion.deleteDraftInvoice(db, id, user.id); return true; },
+  },
 
   'invoices:issue': {
     capability: 'invoices.issue',

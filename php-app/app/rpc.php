@@ -170,6 +170,16 @@ function rpc_registry(): array {
     $op('orgs:recordDueDiligence', 'clients.write', false, false, fn($db, $user, $p) =>
         record_due_diligence($db, $p + ['performedBy' => $p['performedBy'] ?? $user['name']], $user['id']));
 
+    $op('orgs:delete', 'clients.write', false, false, function ($db, $user, $p) {
+        delete_organisation($db, $p['id'], $user['id']);
+        return true;
+    });
+
+    $op('sites:delete', 'clients.write', false, false, function ($db, $user, $p) {
+        delete_site($db, $p['id'], $user['id']);
+        return true;
+    });
+
     $op('sites:save', 'clients.write', false, false, function ($db, $user, $p) {
         $now = now_instant();
         if (!empty($p['id'])) {
@@ -228,6 +238,11 @@ function rpc_registry(): array {
             'recentShifts' => rows($db, 'SELECT s.*, a.title FROM shifts s JOIN assignments a ON a.id = s.assignment_id
                 WHERE s.worker_id = ? ORDER BY s.starts_at DESC LIMIT 30', [$p['id']]),
         ];
+    });
+
+    $op('workers:delete', 'workers.write', false, false, function ($db, $user, $p) {
+        delete_worker($db, $p['id'], $user['id']);
+        return true;
     });
 
     $op('workers:save', 'workers.write', false, false, function ($db, $user, $p) {
@@ -392,6 +407,11 @@ function rpc_registry(): array {
         ];
     });
 
+    $op('assignments:delete', 'clients.write', false, false, function ($db, $user, $p) {
+        delete_assignment($db, $p['id'], $user['id']);
+        return true;
+    });
+
     $op('assignments:save', 'clients.write', false, false, function ($db, $user, $p) {
         $now = now_instant();
         if (!empty($p['id'])) {
@@ -468,6 +488,11 @@ function rpc_registry(): array {
             'charge_rate_override_pence', 'pay_rate_override_pence'])), $result);
     });
 
+    $op('shifts:delete', 'rota.write', false, false, function ($db, $user, $p) {
+        delete_shift($db, $p['id'], $user['id']);
+        return true;
+    });
+
     $op('shifts:create', 'rota.write', false, false, fn($db, $user, $p) => create_shift($db, $p, $user['id']));
     $op('shifts:createSeries', 'rota.write', false, false, function ($db, $user, $p) {
         $created = [];
@@ -536,6 +561,11 @@ function rpc_registry(): array {
             ($p['input'] ?? []) + ['approvedBy' => $user['name']], $p['opts'] ?? [], $user['id']);
         return timesheet_with_lines($db, $p['id']);
     });
+    $op('timesheets:delete', 'timesheets.write', false, false, function ($db, $user, $p) {
+        delete_timesheet($db, $p['id'], $user['id']);
+        return true;
+    });
+
     $op('timesheets:reopen', 'timesheets.approve', false, false, function ($db, $user, $p) {
         reopen_timesheet($db, $p['id'], $p['reason'], $user['id']);
         return true;
@@ -572,6 +602,11 @@ function rpc_registry(): array {
         invoice_remove_line($db, $p['invoiceId'], $p['lineId']);
         return true;
     });
+    $op('invoices:deleteDraft', 'invoices.write', false, false, function ($db, $user, $p) {
+        delete_draft_invoice($db, $p['id'], $user['id']);
+        return true;
+    });
+
     $op('invoices:updateDraft', 'invoices.write', false, false, function ($db, $user, $p) {
         invoice_update_draft($db, $p['id'], $p['changes'], $user['id']);
         return invoice_with_detail($db, $p['id']);

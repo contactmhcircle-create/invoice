@@ -531,3 +531,181 @@ function timesheet_with_lines(PDO $db, string $timesheetId): ?array {
         'holidayAccrualPence' => holiday_accrual_pence((int) $ts['pay_total_pence']),
     ];
 }
+
+// ---------------------------------------------------------------------------
+// Deletion — records with no history go, records in the paper trail stay
+// ---------------------------------------------------------------------------
+// The rule: a record that never entered the paper trail — a duplicate client
+// added twice, a worker who never worked, a shift nobody was allocated to —
+// can be deleted outright, and the append-only audit log keeps a snapshot of
+// what was removed and by whom. A record with history behind it is refused
+// with a message naming exactly what stands in the way; those are closed or
+// voided instead, never erased.
+
+/** Human-readable count of blocking references, or null when clear. */
+function blocking_references(PDO $db, array $checks, string $id): ?string {
+    $found = [];
+    foreach ($checks as [$table, $column, $label]) {
+        $n = (int) scalar($db, "SELECT COUNT(*) FROM $table WHERE $column = ?", [$id]);
+        if ($n > 0) $found[] = "$n $label" . ($n === 1 ? '' : 's');
+    }
+    return $found ? implode(', ', $found) : null;
+}
+
+function purge_documents(PDO $db, string $entityType, string $entityId): void {
+    q($db, 'DELETE FROM documents WHERE entity_type = ? AND entity_id = ?', [$entityType, $entityId]);
+}
+
+function delete_organisation(PDO $db, string $orgId, string $actor = 'system'): void {
+    $org = row($db, 'SELECT * FROM organisations WHERE id = ?', [$orgId]);
+    if (!$org) throw new DomainException('Organisation not found');
+
+    $blocking = blocking_references($db, [
+        ['sites', 'organisation_id', 'site'],
+        ['workers', 'umbrella_org_id', 'worker paid via this umbrella'],
+        ['assignments', 'client_org_id', 'assignment'],
+        ['invoices', 'client_org_id', 'invoice'],
+        ['credit_notes', 'client_org_id', 'credit note'],
+        ['payments', 'organisation_id', 'payment'],
+        ['purchase_invoices', 'organisation_id', 'purchase invoice'],
+        ['self_bills', 'organisation_id', 'self-bill'],
+        ['supply_chain_links', 'organisation_id', 'supply chain link'],
+    ], $orgId);
+    if ($blocking) {
+        throw new DomainException("{$org['name']} cannot be deleted — it has $blocking on record. "
+            . 'Records with history are kept for the audit trail: set the organisation to closed instead.');
+    }
+
+    q($db, 'DELETE FROM org_due_diligence WHERE organisation_id = ?', [$orgId]);
+    q($db, "DELETE FROM rates WHERE scope = 'client' AND scope_id = ?", [$orgId]);
+    purge_documents($db, 'organisation', $orgId);
+    q($db, 'DELETE FROM organisations WHERE id = ?', [$orgId]);
+
+    record_audit($db, ['entityType' => 'organisation', 'entityId' => $orgId, 'action' => 'deleted',
+        'summary' => "Organisation deleted: {$org['name']} (no linked records)",
+        'actor' => $actor, 'before' => $org]);
+}
+
+function delete_worker(PDO $db, string $workerId, string $actor = 'system'): void {
+    $w = row($db, 'SELECT * FROM workers WHERE id = ?', [$workerId]);
+    if (!$w) throw new DomainException('Worker not found');
+
+    $blocking = blocking_references($db, [
+        ['shifts', 'worker_id', 'shift'],
+        ['timesheets', 'worker_id', 'timesheet'],
+        ['invoice_lines', 'worker_id', 'invoice line'],
+    ], $workerId);
+    if ($blocking) {
+        throw new DomainException("{$w['first_name']} {$w['last_name']} cannot be deleted — they have $blocking on record. "
+            . 'Worked history is kept for the audit trail: mark the worker as left instead.');
+    }
+
+    // Vetting records cascade with the worker; evidence scans do not, so
+    // remove them explicitly.
+    purge_documents($db, 'worker', $workerId);
+    q($db, 'DELETE FROM workers WHERE id = ?', [$workerId]);
+
+    record_audit($db, ['entityType' => 'worker', 'entityId' => $workerId, 'action' => 'deleted',
+        'summary' => "Worker deleted: {$w['first_name']} {$w['last_name']} ("
+            . ($w['reference'] ?? 'no reference') . ', never worked a shift)',
+        'actor' => $actor, 'before' => $w]);
+}
+
+function delete_site(PDO $db, string $siteId, string $actor = 'system'): void {
+    $site = row($db, 'SELECT * FROM sites WHERE id = ?', [$siteId]);
+    if (!$site) throw new DomainException('Site not found');
+
+    $blocking = blocking_references($db, [
+        ['assignments', 'site_id', 'assignment'],
+        ['shifts', 'site_id', 'shift'],
+    ], $siteId);
+    if ($blocking) {
+        throw new DomainException("{$site['name']} cannot be deleted — it has $blocking linked. Set it to closed instead.");
+    }
+
+    q($db, "DELETE FROM rates WHERE scope = 'site' AND scope_id = ?", [$siteId]);
+    q($db, 'DELETE FROM sites WHERE id = ?', [$siteId]);
+    record_audit($db, ['entityType' => 'site', 'entityId' => $siteId, 'action' => 'deleted',
+        'summary' => "Site deleted: {$site['name']}", 'actor' => $actor, 'before' => $site]);
+}
+
+function delete_assignment(PDO $db, string $assignmentId, string $actor = 'system'): void {
+    $a = row($db, 'SELECT * FROM assignments WHERE id = ?', [$assignmentId]);
+    if (!$a) throw new DomainException('Assignment not found');
+
+    // Shifts would cascade away silently — refuse instead, so rota history is
+    // never lost as a side effect.
+    $blocking = blocking_references($db, [
+        ['shifts', 'assignment_id', 'shift'],
+        ['timesheets', 'assignment_id', 'timesheet'],
+        ['invoices', 'assignment_id', 'invoice'],
+    ], $assignmentId);
+    if ($blocking) {
+        throw new DomainException("{$a['title']} cannot be deleted — it has $blocking on record. "
+            . 'Delete its planned shifts from the rota first, or set the assignment to ended.');
+    }
+
+    q($db, "DELETE FROM rates WHERE scope = 'assignment' AND scope_id = ?", [$assignmentId]);
+    q($db, 'DELETE FROM supply_chain_links WHERE assignment_id = ?', [$assignmentId]);
+    q($db, 'DELETE FROM assignments WHERE id = ?', [$assignmentId]);
+    record_audit($db, ['entityType' => 'assignment', 'entityId' => $assignmentId, 'action' => 'deleted',
+        'summary' => "Assignment deleted: {$a['title']} (no shifts ever rostered)",
+        'actor' => $actor, 'before' => $a]);
+}
+
+function delete_shift(PDO $db, string $shiftId, string $actor = 'system'): void {
+    $s = row($db, 'SELECT * FROM shifts WHERE id = ?', [$shiftId]);
+    if (!$s) throw new DomainException('Shift not found');
+
+    if (!in_array($s['status'], ['planned', 'allocated', 'cancelled'], true)) {
+        throw new DomainException('A ' . str_replace('_', ' ', $s['status'])
+            . ' shift is part of the worked record and cannot be deleted.');
+    }
+    if ((int) scalar($db, 'SELECT COUNT(*) FROM timesheet_lines WHERE shift_id = ?', [$shiftId]) > 0) {
+        throw new DomainException('This shift is on a timesheet. Remove the timesheet line first.');
+    }
+
+    purge_documents($db, 'shift', $shiftId);
+    q($db, 'DELETE FROM shifts WHERE id = ?', [$shiftId]);
+    record_audit($db, ['entityType' => 'shift', 'entityId' => $shiftId, 'action' => 'deleted',
+        'summary' => "Shift deleted: {$s['starts_at']}–{$s['ends_at']} ({$s['status']}, never worked)",
+        'actor' => $actor, 'before' => $s]);
+}
+
+function delete_timesheet(PDO $db, string $timesheetId, string $actor = 'system'): void {
+    $t = row($db, 'SELECT * FROM timesheets WHERE id = ?', [$timesheetId]);
+    if (!$t) throw new DomainException('Timesheet not found');
+
+    if ($t['status'] !== 'draft') {
+        throw new DomainException("A {$t['status']} timesheet cannot be deleted — it is part of the billing record. "
+            . ($t['status'] === 'approved' ? 'Reopen it first if it was approved by mistake.' : ''));
+    }
+    if ((int) scalar($db, 'SELECT COUNT(*) FROM invoice_lines WHERE timesheet_id = ?', [$timesheetId]) > 0) {
+        throw new DomainException('This timesheet is on an invoice. Remove it from the draft invoice first.');
+    }
+
+    q($db, 'DELETE FROM timesheet_lines WHERE timesheet_id = ?', [$timesheetId]);
+    purge_documents($db, 'timesheet', $timesheetId);
+    q($db, 'DELETE FROM timesheets WHERE id = ?', [$timesheetId]);
+    record_audit($db, ['entityType' => 'timesheet', 'entityId' => $timesheetId, 'action' => 'deleted',
+        'summary' => "Draft timesheet {$t['reference']} deleted (never approved)",
+        'actor' => $actor, 'before' => $t]);
+}
+
+function delete_draft_invoice(PDO $db, string $invoiceId, string $actor = 'system'): void {
+    $inv = row($db, 'SELECT * FROM invoices WHERE id = ?', [$invoiceId]);
+    if (!$inv) throw new DomainException('Invoice not found');
+
+    if ($inv['status'] !== 'draft' || $inv['number']) {
+        throw new DomainException('Only unissued drafts can be deleted. An issued invoice holds a number '
+            . 'in the gapless series — void it instead, and it stays on record.');
+    }
+
+    // Give the timesheets back to the unbilled list before the lines cascade away.
+    q($db, 'UPDATE timesheets SET invoice_id = NULL, updated_at = ? WHERE invoice_id = ?',
+        [now_instant(), $invoiceId]);
+    q($db, 'DELETE FROM invoices WHERE id = ?', [$invoiceId]);
+    record_audit($db, ['entityType' => 'invoice', 'entityId' => $invoiceId, 'action' => 'deleted',
+        'summary' => 'Draft invoice deleted before issue (no number was ever allocated)',
+        'actor' => $actor, 'before' => $inv]);
+}

@@ -96,6 +96,7 @@ function TimesheetDetail({ id, onClose, onChange }: { id: string; onClose: () =>
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [reopening, setReopening] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const reload = () => { refresh(); onChange(); };
 
@@ -130,12 +131,30 @@ function TimesheetDetail({ id, onClose, onChange }: { id: string; onClose: () =>
             <button className="btn" onClick={() => setReopening(true)}>Reopen</button>
           )}
           {editable && (
-            <button className="btn primary" onClick={() => setApproving(true)}>Approve</button>
+            <>
+              <button className="btn danger" onClick={() => setDeleting(true)}>Delete</button>
+              <button className="btn primary" onClick={() => setApproving(true)}>Approve</button>
+            </>
           )}
         </>
       }
     >
       <ErrorNote error={error} />
+
+      {deleting && (
+        <Confirm
+          title={`Delete timesheet ${t.reference}`}
+          message="Only a draft that was never approved can be deleted; a snapshot stays in the audit trail. The shifts on it are untouched and can go onto a fresh timesheet."
+          confirmLabel="Delete timesheet"
+          danger
+          onCancel={() => setDeleting(false)}
+          onConfirm={async () => {
+            setDeleting(false);
+            try { await call('timesheets:delete', { id }); onChange(); onClose(); }
+            catch (e: any) { setError(e.message); }
+          }}
+        />
+      )}
 
       <div className="row-between" style={{ marginBottom: 14 }}>
         <div className="stack">

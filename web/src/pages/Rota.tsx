@@ -18,6 +18,7 @@ export default function Rota({ onChange }: { onChange: () => void }) {
   const [allocating, setAllocating] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [releasing, setReleasing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = () => { refresh(); onChange(); };
@@ -114,7 +115,10 @@ export default function Rota({ onChange }: { onChange: () => void }) {
                         <td><Status value={s.status} /></td>
                         <td className="nowrap">
                           {!s.worker_id ? (
-                            <button className="btn small primary" onClick={() => setAllocating(s.id)}>Allocate</button>
+                            <div className="btn-row">
+                              <button className="btn small primary" onClick={() => setAllocating(s.id)}>Allocate</button>
+                              <button className="btn small danger" onClick={() => setDeleting(s.id)}>Delete</button>
+                            </div>
                           ) : s.status === 'allocated' ? (
                             <div className="btn-row">
                               <button className="btn small" onClick={() => mark(s.id, 'worked')}>Worked</button>
@@ -138,6 +142,19 @@ export default function Rota({ onChange }: { onChange: () => void }) {
       )}
       {creating && (
         <CreateShifts assignments={assignments ?? []} onClose={() => setCreating(false)} onDone={() => { setCreating(false); reload(); }} />
+      )}
+      {deleting && (
+        <Confirm
+          title="Delete this shift"
+          message="Only a shift that was never worked can be deleted. The audit trail keeps a record of the deletion. To delete an allocated shift, release the worker first."
+          confirmLabel="Delete shift"
+          danger
+          onCancel={() => setDeleting(null)}
+          onConfirm={async () => {
+            try { await call('shifts:delete', { id: deleting }); setDeleting(null); reload(); }
+            catch (e: any) { setError(e.message); setDeleting(null); }
+          }}
+        />
       )}
       {releasing && (
         <Confirm
