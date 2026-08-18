@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ClearWrite — Free Writing Tools</title>
+  <meta name="description" content="Free paraphrasing tool, plagiarism checker, AI content detector and writing improver. Fast, private, everything runs in your browser." />
+  <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'&gt;&lt;text y='.9em' font-size='90'&gt;✍️&lt;/text&gt;&lt;/svg&gt;" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#" aria-label="ClearWrite home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path>
+            <path d="M2 2l7.586 7.586"></path>
+            <circle cx="11" cy="11" r="2"></circle>
+          </svg>
+        </span>
+        <span class="brand-name">ClearWrite</span>
+      </a>
+
+      <nav class="tool-nav" aria-label="Tools">
+        <button class="tool-tab active" data-tool="paraphrase" aria-current="page">
+          <span class="tab-icon" aria-hidden="true">🔁</span><span class="tab-label">Paraphraser</span>
+        </button>
+        <button class="tool-tab" data-tool="plagiarism">
+          <span class="tab-icon" aria-hidden="true">🔎</span><span class="tab-label">Plagiarism</span>
+        </button>
+        <button class="tool-tab" data-tool="detector">
+          <span class="tab-icon" aria-hidden="true">🤖</span><span class="tab-label">AI Detector</span>
+        </button>
+        <button class="tool-tab" data-tool="improver">
+          <span class="tab-icon" aria-hidden="true">✨</span><span class="tab-label">Improver</span>
+        </button>
+      </nav>
+
+      <button id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode" title="Toggle theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4m11.4-11.4 1.4-1.4"/></svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="main" class="container">
+
+    <!-- ============ PARAPHRASER ============ -->
+    <section class="tool-panel active" id="panel-paraphrase" aria-labelledby="h-paraphrase">
+      <div class="panel-head">
+        <h1 id="h-paraphrase">Paraphrasing Tool</h1>
+        <p class="panel-sub">Rewrite text for clarity and tone. Pick a mode, paste your text, and compare the result side by side.</p>
+      </div>
+
+      <div class="mode-row" role="radiogroup" aria-label="Paraphrase mode">
+        <button class="mode-chip active" data-mode="standard" role="radio" aria-checked="true">Standard</button>
+        <button class="mode-chip" data-mode="formal" role="radio" aria-checked="false">Formal</button>
+        <button class="mode-chip" data-mode="simple" role="radio" aria-checked="false">Simple</button>
+        <button class="mode-chip" data-mode="concise" role="radio" aria-checked="false">Concise</button>
+      </div>
+
+      <div class="workspace two-pane">
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Original</span>
+            <div class="pane-actions">
+              <button class="ghost-btn" data-action="sample" data-target="pp-input">Try sample</button>
+              <button class="ghost-btn" data-action="paste" data-target="pp-input">Paste</button>
+              <button class="ghost-btn" data-action="clear" data-target="pp-input">Clear</button>
+            </div>
+          </div>
+          <textarea id="pp-input" class="text-input" placeholder="Type or paste your text here…" aria-label="Text to paraphrase"></textarea>
+          <div class="pane-footer">
+            <span class="count" data-count-for="pp-input">0 words</span>
+            <button id="pp-run" class="primary-btn">Paraphrase <span class="kbd-hint">Ctrl+Enter</span></button>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Paraphrased</span>
+            <div class="pane-actions">
+              <label class="toggle-inline"><input type="checkbox" id="pp-show-changes" checked /> Show changes</label>
+              <button class="ghost-btn" data-action="copy" data-target="pp-output">Copy</button>
+            </div>
+          </div>
+          <div id="pp-output" class="text-output" aria-live="polite">
+            <div class="empty-state">
+              <div class="empty-icon" aria-hidden="true">🔁</div>
+              <p>Your rewritten text will appear here.</p>
+              <p class="empty-hint">Changed words are highlighted so you can review every edit.</p>
+            </div>
+          </div>
+          <div class="pane-footer">
+            <span class="count" id="pp-out-count"></span>
+            <span class="muted" id="pp-changed-note"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PLAGIARISM ============ -->
+    <section class="tool-panel" id="panel-plagiarism" aria-labelledby="h-plagiarism" hidden>
+      <div class="panel-head">
+        <h1 id="h-plagiarism">Plagiarism Checker</h1>
+        <p class="panel-sub">Compare a document against a source. Matching passages are highlighted in both texts with an overall similarity score.</p>
+      </div>
+
+      <div class="workspace two-pane">
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Your document</span>
+            <div class="pane-actions">
+              <button class="ghost-btn" data-action="sample" data-target="pl-doc">Try sample</button>
+              <button class="ghost-btn" data-action="paste" data-target="pl-doc">Paste</button>
+              <button class="ghost-btn" data-action="clear" data-target="pl-doc">Clear</button>
+            </div>
+          </div>
+          <textarea id="pl-doc" class="text-input" placeholder="Paste the document you want to check…" aria-label="Document to check"></textarea>
+          <div class="pane-footer"><span class="count" data-count-for="pl-doc">0 words</span></div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Source to compare against</span>
+            <div class="pane-actions">
+              <button class="ghost-btn" data-action="paste" data-target="pl-src">Paste</button>
+              <button class="ghost-btn" data-action="clear" data-target="pl-src">Clear</button>
+            </div>
+          </div>
+          <textarea id="pl-src" class="text-input" placeholder="Paste the source text (an article, an essay, another submission)…" aria-label="Source text"></textarea>
+          <div class="pane-footer"><span class="count" data-count-for="pl-src">0 words</span></div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="pl-run" class="primary-btn">Check similarity <span class="kbd-hint">Ctrl+Enter</span></button>
+      </div>
+
+      <div id="pl-results" class="results-card" hidden>
+        <div class="score-row">
+          <div class="score-dial" id="pl-dial" role="img" aria-label="Similarity score">
+            <svg viewBox="0 0 120 120" width="120" height="120">
+              <circle class="dial-track" cx="60" cy="60" r="52" />
+              <circle class="dial-fill" id="pl-dial-fill" cx="60" cy="60" r="52" />
+            </svg>
+            <div class="dial-center"><span id="pl-score">0%</span><small>similar</small></div>
+          </div>
+          <div class="score-meta">
+            <h2 id="pl-verdict">—</h2>
+            <p id="pl-detail" class="muted"></p>
+            <ul class="legend">
+              <li><span class="swatch swatch-match"></span> Matched passage (5+ words in a row)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="compare-grid">
+          <div>
+            <h3>Your document</h3>
+            <div id="pl-doc-marked" class="marked-text"></div>
+          </div>
+          <div>
+            <h3>Source</h3>
+            <div id="pl-src-marked" class="marked-text"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ AI DETECTOR ============ -->
+    <section class="tool-panel" id="panel-detector" aria-labelledby="h-detector" hidden>
+      <div class="panel-head">
+        <h1 id="h-detector">AI Content Detector</h1>
+        <p class="panel-sub">Estimate how likely a text is machine-generated using stylometric signals — sentence rhythm, vocabulary variety, and common AI phrasing.</p>
+      </div>
+
+      <div class="workspace two-pane">
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Text to analyze</span>
+            <div class="pane-actions">
+              <button class="ghost-btn" data-action="sample" data-target="ai-input">Try sample</button>
+              <button class="ghost-btn" data-action="paste" data-target="ai-input">Paste</button>
+              <button class="ghost-btn" data-action="clear" data-target="ai-input">Clear</button>
+            </div>
+          </div>
+          <textarea id="ai-input" class="text-input" placeholder="Paste at least ~50 words for a meaningful reading…" aria-label="Text to analyze"></textarea>
+          <div class="pane-footer">
+            <span class="count" data-count-for="ai-input">0 words</span>
+            <button id="ai-run" class="primary-btn">Analyze <span class="kbd-hint">Ctrl+Enter</span></button>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-toolbar"><span class="pane-title">Report</span></div>
+          <div id="ai-results" class="report-body">
+            <div class="empty-state">
+              <div class="empty-icon" aria-hidden="true">🤖</div>
+              <p>Your analysis report will appear here.</p>
+              <p class="empty-hint">You'll get an overall estimate plus a breakdown of each signal.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="disclaimer">⚠️ No AI detector is definitive — this is a stylometric <em>estimate</em>, not proof. Never use a score alone to accuse someone of using AI.</p>
+    </section>
+
+    <!-- ============ IMPROVER ============ -->
+    <section class="tool-panel" id="panel-improver" aria-labelledby="h-improver" hidden>
+      <div class="panel-head">
+        <h1 id="h-improver">Writing Improver</h1>
+        <p class="panel-sub">Hemingway-style feedback: readability scores plus inline highlights for long sentences, passive voice, filler words and clichés.</p>
+      </div>
+
+      <div class="workspace two-pane">
+        <div class="pane">
+          <div class="pane-toolbar">
+            <span class="pane-title">Your text</span>
+            <div class="pane-actions">
+              <button class="ghost-btn" data-action="sample" data-target="im-input">Try sample</button>
+              <button class="ghost-btn" data-action="paste" data-target="im-input">Paste</button>
+              <button class="ghost-btn" data-action="clear" data-target="im-input">Clear</button>
+            </div>
+          </div>
+          <textarea id="im-input" class="text-input" placeholder="Paste a draft to get instant feedback…" aria-label="Text to improve"></textarea>
+          <div class="pane-footer">
+            <span class="count" data-count-for="im-input">0 words</span>
+            <button id="im-run" class="primary-btn">Review <span class="kbd-hint">Ctrl+Enter</span></button>
+          </div>
+        </div>
+
+        <div class="pane">
+          <div class="pane-toolbar"><span class="pane-title">Feedback</span></div>
+          <div id="im-results" class="report-body">
+            <div class="empty-state">
+              <div class="empty-icon" aria-hidden="true">✨</div>
+              <p>Readability stats and suggestions will appear here.</p>
+              <p class="empty-hint">Issues are color-coded and highlighted right in your text.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p><strong>ClearWrite</strong> — free writing tools that run entirely in your browser. Nothing you type ever leaves your device.</p>
+      <p class="muted">The paraphraser is a writing aid: always review its output, and follow your school's or employer's rules on tool use and attribution.</p>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/samples.js"></script>
+  <script src="js/textkit.js"></script>
+  <script src="js/paraphrase.js"></script>
+  <script src="js/plagiarism.js"></script>
+  <script src="js/detector.js"></script>
+  <script src="js/improver.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
