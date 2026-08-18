@@ -483,6 +483,27 @@ function set_screening_element(PDO $db, string $workerId, string $element, strin
     ]);
 }
 
+/**
+ * Moves an onboarding worker to active the moment their last compliance
+ * blocker clears. Vetting done should mean placeable — leaving activation as
+ * a separate manual step just strands compliant workers outside the rota.
+ * Only the onboarding→active transition is automatic; inactive, left and
+ * barred are deliberate states that stay until an operator changes them.
+ */
+function activate_if_clear(PDO $db, string $workerId, string $actor = 'system'): bool {
+    $status = scalar($db, 'SELECT status FROM workers WHERE id = ?', [$workerId]);
+    if ($status !== 'onboarding') return false;
+    if (count(check_worker($db, $workerId)['blockers']) > 0) return false;
+
+    q($db, "UPDATE workers SET status = 'active', updated_at = ? WHERE id = ?",
+        [now_instant(), $workerId]);
+    record_audit($db, [
+        'entityType' => 'worker', 'entityId' => $workerId, 'action' => 'activated',
+        'summary' => 'Worker activated — every compliance check is clear', 'actor' => $actor,
+    ]);
+    return true;
+}
+
 /** Dashboard feed: everything expiring or overdue across the workforce. */
 function expiring_compliance(PDO $db, int $withinDays = 60): array {
     $horizon = add_days(today_iso(), $withinDays);

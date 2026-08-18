@@ -400,11 +400,28 @@ export function fillRate(db: Db, assignmentId: string, from: string, to: string)
 
 /** Workers who could legally cover a given shift, with their warnings attached. */
 export function eligibleWorkers(db: Db, shiftId: string) {
+  // Non-active workers are listed as blocked rather than silently omitted —
+  // "0 candidates" with three onboarding workers on the books reads as a bug.
   const candidates = db
-    .prepare(`SELECT id, first_name, last_name FROM workers WHERE status = 'active' ORDER BY last_name`)
+    .prepare(`SELECT id, first_name, last_name, status FROM workers
+              WHERE status NOT IN ('left','barred') ORDER BY last_name`)
     .all() as any[];
 
   return candidates.map((w) => {
+    if (w.status !== 'active') {
+      return {
+        workerId: w.id,
+        name: `${w.first_name} ${w.last_name}`,
+        eligible: false,
+        blockers: [{
+          code: 'worker_not_active',
+          severity: 'blocker',
+          title: `Worker is ${w.status} — mark them active from their Workers page once vetting is complete`,
+          detail: 'Only active workers can be allocated to shifts.',
+        }],
+        warnings: [],
+      };
+    }
     let check: AllocationCheck;
     try {
       check = checkAllocation(db, shiftId, w.id);

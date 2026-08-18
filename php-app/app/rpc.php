@@ -254,6 +254,8 @@ function rpc_registry(): array {
                 'summary' => 'Worker record updated: ' . implode(', ', $present),
                 'actor' => $user['id'], 'before' => $before, 'after' => $p,
             ]);
+            // An umbrella link or engagement change can clear the last blocker.
+            activate_if_clear($db, $p['id'], $user['id']);
             return $p['id'];
         }
 
@@ -292,6 +294,7 @@ function rpc_registry(): array {
                 . " licence {$p['licence_number']} recorded, expires {$p['expires_on']}",
             'actor' => $user['id'], 'after' => $p,
         ]);
+        activate_if_clear($db, $p['worker_id'], $user['id']);
         return $id;
     });
 
@@ -309,12 +312,14 @@ function rpc_registry(): array {
             'summary' => "Right to work check ({$p['method']}) recorded — outcome {$p['outcome']}",
             'actor' => $user['id'], 'after' => $p,
         ]);
+        activate_if_clear($db, $p['worker_id'], $user['id']);
         return $id;
     });
 
     $op('workers:setScreening', 'compliance.write', false, false, function ($db, $user, $p) {
         set_screening_element($db, $p['workerId'], $p['element'], $p['status'],
             array_diff_key($p, array_flip(['workerId', 'element', 'status'])) + ['actor' => $user['id'], 'verifiedBy' => $user['name']]);
+        activate_if_clear($db, $p['workerId'], $user['id']);
         return check_worker($db, $p['workerId']);
     });
 

@@ -9,6 +9,7 @@ import {
   checkNmw,
   nmwBandFor,
   holidayAccrualPence,
+  activateIfClear,
 } from '../core/services/compliance.js';
 import { createShift, allocateWorker, checkAllocation, eligibleWorkers } from '../core/services/shifts.js';
 import { addDays, today, nowInstant } from '../shared/dates.js';
@@ -257,6 +258,60 @@ describe('Eligible worker listing', () => {
     expect(ada.eligible).toBe(true);
     expect(bob.eligible).toBe(false);
     expect(bob.blockers.length).toBeGreaterThan(0);
+  });
+
+  it('lists a fully-vetted onboarding worker as blocked with an activation hint, not silently missing', () => {
+    const db = freshDb();
+    const client = makeOrg(db);
+    const assignment = makeAssignment(db, client);
+    const stuck = makeWorker(db, { firstName: 'Iqrar', lastName: 'Hassan', status: 'onboarding' });
+
+    const shift = createShift(db, {
+      assignmentId: assignment,
+      startsAt: `${addDays(today(), 3)}T18:00:00`,
+      endsAt: `${addDays(today(), 3)}T23:00:00`,
+    });
+
+    const row = eligibleWorkers(db, shift).find((w) => w.workerId === stuck)!;
+    expect(row).toBeDefined();
+    expect(row.eligible).toBe(false);
+    expect(row.blockers[0].title).toMatch(/onboarding.*mark them active/i);
+
+    // Left and barred workers stay out of the list entirely.
+    const gone = makeWorker(db, { status: 'left' });
+    expect(eligibleWorkers(db, shift).some((w) => w.workerId === gone)).toBe(false);
+  });
+});
+
+describe('Automatic activation when vetting completes', () => {
+  it('flips an onboarding worker to active when the last compliance blocker clears', () => {
+    const db = freshDb();
+    // Fully compliant except the final BS 7858 element, and still onboarding.
+    const worker = makeWorker(db, { status: 'onboarding' });
+    setScreeningElement(db, worker, 'criminal_record', 'in_progress');
+    expect(checkWorker(db, worker).blockers.length).toBeGreaterThan(0);
+
+    expect(activateIfClear(db, worker)).toBe(false); // blocked — must not activate
+    expect((db.prepare('SELECT status FROM workers WHERE id = ?').get(worker) as any).status).toBe('onboarding');
+
+    setScreeningElement(db, worker, 'criminal_record', 'satisfied');
+    expect(activateIfClear(db, worker)).toBe(true);
+    const after = db.prepare('SELECT status FROM workers WHERE id = ?').get(worker) as any;
+    expect(after.status).toBe('active');
+
+    const audit = db.prepare(
+      `SELECT summary FROM audit_log WHERE entity_id = ? AND action = 'activated'`,
+    ).get(worker) as any;
+    expect(audit.summary).toMatch(/activated — every compliance check is clear/i);
+  });
+
+  it('never touches inactive, left or barred workers', () => {
+    const db = freshDb();
+    for (const status of ['inactive', 'left', 'barred']) {
+      const worker = makeWorker(db, { status });
+      expect(activateIfClear(db, worker)).toBe(false);
+      expect((db.prepare('SELECT status FROM workers WHERE id = ?').get(worker) as any).status).toBe(status);
+    }
   });
 });
 

@@ -114,6 +114,11 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
     catch (e: any) { setError(e.message); }
   };
 
+  const setStatus = async (status: string) => {
+    try { await call('workers:save', { id, status }); reload(); }
+    catch (e: any) { setError(e.message); }
+  };
+
   if (loading || !w) return <Modal title="Worker" onClose={onClose}><Loading /></Modal>;
 
   return (
@@ -131,6 +136,17 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
           </div>
         </div>
         <div className="btn-row">
+          <select
+            value={w.status}
+            onChange={(e) => setStatus(e.target.value)}
+            title="Worker status — only active workers can be allocated to shifts"
+          >
+            <option value="onboarding">onboarding</option>
+            <option value="active">active</option>
+            <option value="inactive">inactive</option>
+            <option value="left">left</option>
+            <option value="barred">barred</option>
+          </select>
           <button className="btn small" onClick={issueKid}>Issue KID</button>
           <label className="btn small">
             Attach document
@@ -138,6 +154,15 @@ function WorkerDetail({ id, onClose, onChange }: { id: string; onClose: () => vo
           </label>
         </div>
       </div>
+
+      {w.status === 'onboarding' && w.compliance?.placeable && (
+        <div className="alert ok">
+          <strong>Vetting complete — this worker can be activated</strong>
+          Every compliance check is clear, but only <em>active</em> workers appear when allocating
+          shifts.{' '}
+          <button className="btn small primary" onClick={() => setStatus('active')}>Mark active</button>
+        </div>
+      )}
 
       <div className="btn-row" style={{ marginBottom: 14 }}>
         {(['compliance', 'licences', 'screening', 'shifts'] as const).map((t) => (

@@ -657,3 +657,24 @@ export function setScreeningElement(
     after: { element, status, ...opts },
   });
 }
+
+/**
+ * Moves an onboarding worker to active the moment their last compliance
+ * blocker clears. Vetting done should mean placeable — leaving activation as
+ * a separate manual step just strands compliant workers outside the rota.
+ * Only the onboarding→active transition is automatic; inactive, left and
+ * barred are deliberate states that stay until an operator changes them.
+ */
+export function activateIfClear(db: Db, workerId: string, actor = 'system'): boolean {
+  const worker = db.prepare('SELECT status FROM workers WHERE id = ?').get(workerId) as any;
+  if (!worker || worker.status !== 'onboarding') return false;
+  if (checkWorker(db, workerId).blockers.length > 0) return false;
+
+  db.prepare(`UPDATE workers SET status = 'active', updated_at = ? WHERE id = ?`)
+    .run(nowInstant(), workerId);
+  recordAudit(db, {
+    entityType: 'worker', entityId: workerId, action: 'activated',
+    summary: 'Worker activated — every compliance check is clear', actor,
+  });
+  return true;
+}

@@ -362,6 +362,8 @@ const ops: Record<string, Operation> = {
           entityType: 'worker', entityId: payload.id, action: 'updated',
           summary: `Worker record updated: ${present.join(', ')}`, actor: user.id, before, after: payload,
         });
+        // An umbrella link or engagement change can clear the last blocker.
+        compliance.activateIfClear(db, payload.id, user.id);
         return payload.id;
       }
 
@@ -405,6 +407,7 @@ const ops: Record<string, Operation> = {
         summary: `SIA ${String(payload.sector).replace(/_/g, ' ')} licence ${payload.licence_number} recorded, expires ${payload.expires_on}`,
         actor: user.id, after: payload,
       });
+      compliance.activateIfClear(db, payload.worker_id, user.id);
       return id;
     },
   },
@@ -426,6 +429,7 @@ const ops: Record<string, Operation> = {
         summary: `Right to work check (${payload.method}) recorded — outcome ${payload.outcome}`,
         actor: user.id, after: payload,
       });
+      compliance.activateIfClear(db, payload.worker_id, user.id);
       return id;
     },
   },
@@ -478,6 +482,7 @@ const ops: Record<string, Operation> = {
     capability: 'compliance.write',
     handler: ({ db, user }, { workerId, element, status, ...opts }) => {
       compliance.setScreeningElement(db, workerId, element, status, { ...opts, verifiedBy: user.name });
+      compliance.activateIfClear(db, workerId, user.id);
       return compliance.checkWorker(db, workerId);
     },
   },
