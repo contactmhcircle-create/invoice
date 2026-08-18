@@ -1,65 +1,65 @@
 <?php
 /**
- * Plugin Name:       ClearWrite Writing Tools
+ * Plugin Name:       PlaigBot Writing Tools
  * Plugin URI:        https://github.com/contactmhcircle-create/invoice
- * Description:       Free writing tools — paraphrasing tool, plagiarism checker, AI content detector and writing improver. All processing happens in the visitor's browser; no text is sent to any server. Add the [clearwrite] shortcode to any page.
+ * Description:       Free writing tools — paraphrasing tool, plagiarism checker, AI content detector and writing improver. All processing happens in the visitor's browser; no text is sent to any server. Add the [plaigbot] shortcode to any page.
  * Version:           1.0.0
  * Requires at least: 5.0
  * Requires PHP:      7.0
- * Author:            ClearWrite
+ * Author:            PlaigBot
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       clearwrite
+ * Text Domain:       plaigbot
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CLEARWRITE_VERSION', '1.0.0' );
-define( 'CLEARWRITE_URL', plugin_dir_url( __FILE__ ) );
+define( 'PLAIGBOT_VERSION', '1.0.0' );
+define( 'PLAIGBOT_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Register assets (loaded only on pages that use the shortcode).
  */
-function clearwrite_register_assets() {
+function plaigbot_register_assets() {
 	wp_register_style(
-		'clearwrite-fonts',
+		'plaigbot-fonts',
 		'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital@0;1&display=swap',
 		array(),
 		null
 	);
-	wp_register_style( 'clearwrite', CLEARWRITE_URL . 'assets/css/clearwrite.css', array( 'clearwrite-fonts' ), CLEARWRITE_VERSION );
+	wp_register_style( 'plaigbot', PLAIGBOT_URL . 'assets/css/plaigbot.css', array( 'plaigbot-fonts' ), PLAIGBOT_VERSION );
 
 	$scripts = array( 'samples', 'textkit', 'paraphrase', 'plagiarism', 'detector', 'improver', 'app' );
 	$deps    = array();
 	foreach ( $scripts as $script ) {
-		$handle = 'clearwrite-' . $script;
-		wp_register_script( $handle, CLEARWRITE_URL . 'assets/js/' . $script . '.js', $deps, CLEARWRITE_VERSION, true );
+		$handle = 'plaigbot-' . $script;
+		wp_register_script( $handle, PLAIGBOT_URL . 'assets/js/' . $script . '.js', $deps, PLAIGBOT_VERSION, true );
 		$deps = array( $handle );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'clearwrite_register_assets' );
+add_action( 'wp_enqueue_scripts', 'plaigbot_register_assets' );
 
 /**
- * [clearwrite] shortcode.
+ * [plaigbot] shortcode.
  *
  * Attributes:
  *   tool — starting tab: paraphrase | plagiarism | detector | improver
  */
-function clearwrite_shortcode( $atts ) {
-	$atts  = shortcode_atts( array( 'tool' => 'paraphrase' ), $atts, 'clearwrite' );
+function plaigbot_shortcode( $atts ) {
+	$atts  = shortcode_atts( array( 'tool' => 'paraphrase' ), $atts, 'plaigbot' );
 	$valid = array( 'paraphrase', 'plagiarism', 'detector', 'improver' );
 	$tool  = in_array( $atts['tool'], $valid, true ) ? $atts['tool'] : 'paraphrase';
 
-	wp_enqueue_style( 'clearwrite' );
-	wp_enqueue_script( 'clearwrite-app' );
+	wp_enqueue_style( 'plaigbot' );
+	wp_enqueue_script( 'plaigbot-app' );
 
-	$markup = <<<'CLEARWRITE_HTML'
+	$markup = <<<'PLAIGBOT_HTML'
 
   <header class="site-header">
     <div class="container header-inner">
-      <span class="brand" aria-label="ClearWrite">
+      <span class="brand" aria-label="PlaigBot">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
@@ -68,7 +68,7 @@ function clearwrite_shortcode( $atts ) {
             <circle cx="11" cy="11" r="2"></circle>
           </svg>
         </span>
-        <span class="brand-name">ClearWrite</span>
+        <span class="brand-name">PlaigBot</span>
       </span>
 
       <nav class="tool-nav" aria-label="Tools">
@@ -294,15 +294,15 @@ function clearwrite_shortcode( $atts ) {
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p><strong>ClearWrite</strong> — free writing tools that run entirely in your browser. Nothing you type ever leaves your device.</p>
+      <p><strong>PlaigBot</strong> — free writing tools that run entirely in your browser. Nothing you type ever leaves your device.</p>
       <p class="muted">The paraphraser is a writing aid: always review its output, and follow your school's or employer's rules on tool use and attribution.</p>
     </div>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-CLEARWRITE_HTML;
+PLAIGBOT_HTML;
 
-	return '<div class="clearwrite-app" data-initial-tool="' . esc_attr( $tool ) . '">' . $markup . '</div>';
+	return '<div class="plaigbot-app" data-initial-tool="' . esc_attr( $tool ) . '">' . $markup . '</div>';
 }
-add_shortcode( 'clearwrite', 'clearwrite_shortcode' );
+add_shortcode( 'plaigbot', 'plaigbot_shortcode' );

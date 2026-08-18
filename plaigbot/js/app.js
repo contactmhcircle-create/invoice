@@ -5,14 +5,14 @@
   const $$ = sel => [...document.querySelectorAll(sel)];
 
   /* ---------- Theme ---------- */
-  const root = document.querySelector(".clearwrite-app") || document.documentElement;
-  const storedTheme = localStorage.getItem("cw-theme");
+  const root = document.documentElement;
+  const storedTheme = localStorage.getItem("pb-theme");
   if (storedTheme) root.dataset.theme = storedTheme;
   else if (matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark";
   $("#theme-toggle").addEventListener("click", () => {
     const next = root.dataset.theme === "dark" ? "light" : "dark";
     root.dataset.theme = next;
-    localStorage.setItem("cw-theme", next);
+    localStorage.setItem("pb-theme", next);
   });
 
   /* ---------- Tabs ---------- */
@@ -29,10 +29,10 @@
       p.classList.toggle("active", on);
       p.hidden = !on;
     });
-    /* URL hash untouched when embedded */
+    history.replaceState(null, "", "#" + tool);
   }
   tabs.forEach(t => t.addEventListener("click", () => activate(t.dataset.tool)));
-  const initial = (root.dataset && root.dataset.initialTool) || location.hash.slice(1);
+  const initial = location.hash.slice(1);
   if (["paraphrase", "plagiarism", "detector", "improver"].includes(initial)) activate(initial);
 
   /* ---------- Toast ---------- */

@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-/* Builds the ClearWrite WordPress plugin from the static site in ../clearwrite.
-   - Scopes all CSS under .clearwrite-app so it can't clash with theme styles
+/* Builds the PlaigBot WordPress plugin from the static site in ../plaigbot.
+   - Scopes all CSS under .plaigbot-app so it can't clash with theme styles
    - Adapts app.js to run inside a page (theme state on the wrapper element)
-   - Generates clearwrite.php (shortcode + asset enqueues) and readme.txt
-   Usage: node clearwrite-wp/build.cjs [demo-output.html]                    */
+   - Generates plaigbot.php (shortcode + asset enqueues) and readme.txt
+   Usage: node plaigbot-wp/build.cjs [demo-output.html]                    */
 const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.join(__dirname, "..");
-const SRC = path.join(ROOT, "clearwrite");
-const OUT = path.join(__dirname, "clearwrite");
+const SRC = path.join(ROOT, "plaigbot");
+const OUT = path.join(__dirname, "plaigbot");
 const VERSION = "1.0.0";
 
 /* ---------------- CSS scoping ---------------- */
@@ -17,11 +17,11 @@ function prefixSelector(list) {
   return list.split(",").map(s => {
     s = s.trim();
     if (!s) return s;
-    if (s === ":root" || s === "body" || s === "html") return ".clearwrite-app";
-    if (s.startsWith("[data-theme")) return ".clearwrite-app" + s;
-    if (s === "*") return ".clearwrite-app, .clearwrite-app *";
-    if (s.startsWith("*")) return ".clearwrite-app " + s;
-    return ".clearwrite-app " + s;
+    if (s === ":root" || s === "body" || s === "html") return ".plaigbot-app";
+    if (s.startsWith("[data-theme")) return ".plaigbot-app" + s;
+    if (s === "*") return ".plaigbot-app, .plaigbot-app *";
+    if (s.startsWith("*")) return ".plaigbot-app " + s;
+    return ".plaigbot-app " + s;
   }).join(", ");
 }
 
@@ -66,16 +66,16 @@ function matchBrace(css, openIdx) {
 
 const WP_EXTRA = `
 /* ---- WordPress embed adjustments ---- */
-.clearwrite-app { min-height: 0; }
-.clearwrite-app .site-header {
+.plaigbot-app { min-height: 0; }
+.plaigbot-app .site-header {
   position: sticky;
   top: var(--wp-admin--admin-bar--height, 0px);
   border-radius: var(--radius) var(--radius) 0 0;
 }
-.clearwrite-app .site-footer { border-radius: 0 0 var(--radius) var(--radius); }
-.clearwrite-app a { text-decoration: none; }
+.plaigbot-app .site-footer { border-radius: 0 0 var(--radius) var(--radius); }
+.plaigbot-app a { text-decoration: none; }
 /* Defensive reset: themes commonly style the generic .container class. */
-.clearwrite-app .container {
+.plaigbot-app .container {
   width: min(1180px, 100% - 2rem);
   max-width: none;
   padding: 0;
@@ -83,14 +83,14 @@ const WP_EXTRA = `
   background: none;
   box-shadow: none;
 }
-.clearwrite-app .header-inner { padding: .65rem 0; }
+.plaigbot-app .header-inner { padding: .65rem 0; }
 `;
 
 /* ---------------- app.js adaptation ---------------- */
 function adaptAppJs(js) {
   let out = js.replace(
     "const root = document.documentElement;",
-    'const root = document.querySelector(".clearwrite-app") || document.documentElement;'
+    'const root = document.querySelector(".plaigbot-app") || document.documentElement;'
   );
   out = out.replace(
     "const initial = location.hash.slice(1);",
@@ -101,7 +101,7 @@ function adaptAppJs(js) {
     'history.replaceState(null, "", "#" + tool);',
     "/* URL hash untouched when embedded */"
   );
-  for (const marker of ['document.querySelector(".clearwrite-app")', "root.dataset.initialTool", "URL hash untouched"]) {
+  for (const marker of ['document.querySelector(".plaigbot-app")', "root.dataset.initialTool", "URL hash untouched"]) {
     if (!out.includes(marker)) throw new Error("app.js adaptation failed: " + marker);
   }
   return out;
@@ -111,7 +111,7 @@ function adaptAppJs(js) {
 const MARKUP = `
   <header class="site-header">
     <div class="container header-inner">
-      <span class="brand" aria-label="ClearWrite">
+      <span class="brand" aria-label="PlaigBot">
         <span class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 19l7-7 3 3-7 7-3-3z"></path>
@@ -120,7 +120,7 @@ const MARKUP = `
             <circle cx="11" cy="11" r="2"></circle>
           </svg>
         </span>
-        <span class="brand-name">ClearWrite</span>
+        <span class="brand-name">PlaigBot</span>
       </span>
 
       <nav class="tool-nav" aria-label="Tools">
@@ -151,7 +151,7 @@ __PANELS__
 
   <footer class="site-footer">
     <div class="container footer-inner">
-      <p><strong>ClearWrite</strong> — free writing tools that run entirely in your browser. Nothing you type ever leaves your device.</p>
+      <p><strong>PlaigBot</strong> — free writing tools that run entirely in your browser. Nothing you type ever leaves your device.</p>
       <p class="muted">The paraphraser is a writing aid: always review its output, and follow your school's or employer's rules on tool use and attribution.</p>
     </div>
   </footer>
@@ -173,73 +173,73 @@ function extractPanels(html) {
 function phpFile(markup) {
   return `<?php
 /**
- * Plugin Name:       ClearWrite Writing Tools
+ * Plugin Name:       PlaigBot Writing Tools
  * Plugin URI:        https://github.com/contactmhcircle-create/invoice
- * Description:       Free writing tools — paraphrasing tool, plagiarism checker, AI content detector and writing improver. All processing happens in the visitor's browser; no text is sent to any server. Add the [clearwrite] shortcode to any page.
+ * Description:       Free writing tools — paraphrasing tool, plagiarism checker, AI content detector and writing improver. All processing happens in the visitor's browser; no text is sent to any server. Add the [plaigbot] shortcode to any page.
  * Version:           ${VERSION}
  * Requires at least: 5.0
  * Requires PHP:      7.0
- * Author:            ClearWrite
+ * Author:            PlaigBot
  * License:           GPLv2 or later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       clearwrite
+ * Text Domain:       plaigbot
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CLEARWRITE_VERSION', '${VERSION}' );
-define( 'CLEARWRITE_URL', plugin_dir_url( __FILE__ ) );
+define( 'PLAIGBOT_VERSION', '${VERSION}' );
+define( 'PLAIGBOT_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Register assets (loaded only on pages that use the shortcode).
  */
-function clearwrite_register_assets() {
+function plaigbot_register_assets() {
 	wp_register_style(
-		'clearwrite-fonts',
+		'plaigbot-fonts',
 		'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:ital@0;1&display=swap',
 		array(),
 		null
 	);
-	wp_register_style( 'clearwrite', CLEARWRITE_URL . 'assets/css/clearwrite.css', array( 'clearwrite-fonts' ), CLEARWRITE_VERSION );
+	wp_register_style( 'plaigbot', PLAIGBOT_URL . 'assets/css/plaigbot.css', array( 'plaigbot-fonts' ), PLAIGBOT_VERSION );
 
 	$scripts = array( 'samples', 'textkit', 'paraphrase', 'plagiarism', 'detector', 'improver', 'app' );
 	$deps    = array();
 	foreach ( $scripts as $script ) {
-		$handle = 'clearwrite-' . $script;
-		wp_register_script( $handle, CLEARWRITE_URL . 'assets/js/' . $script . '.js', $deps, CLEARWRITE_VERSION, true );
+		$handle = 'plaigbot-' . $script;
+		wp_register_script( $handle, PLAIGBOT_URL . 'assets/js/' . $script . '.js', $deps, PLAIGBOT_VERSION, true );
 		$deps = array( $handle );
 	}
 }
-add_action( 'wp_enqueue_scripts', 'clearwrite_register_assets' );
+add_action( 'wp_enqueue_scripts', 'plaigbot_register_assets' );
 
 /**
- * [clearwrite] shortcode.
+ * [plaigbot] shortcode.
  *
  * Attributes:
  *   tool — starting tab: paraphrase | plagiarism | detector | improver
  */
-function clearwrite_shortcode( $atts ) {
-	$atts  = shortcode_atts( array( 'tool' => 'paraphrase' ), $atts, 'clearwrite' );
+function plaigbot_shortcode( $atts ) {
+	$atts  = shortcode_atts( array( 'tool' => 'paraphrase' ), $atts, 'plaigbot' );
 	$valid = array( 'paraphrase', 'plagiarism', 'detector', 'improver' );
 	$tool  = in_array( $atts['tool'], $valid, true ) ? $atts['tool'] : 'paraphrase';
 
-	wp_enqueue_style( 'clearwrite' );
-	wp_enqueue_script( 'clearwrite-app' );
+	wp_enqueue_style( 'plaigbot' );
+	wp_enqueue_script( 'plaigbot-app' );
 
-	$markup = <<<'CLEARWRITE_HTML'
+	$markup = <<<'PLAIGBOT_HTML'
 ${markup}
-CLEARWRITE_HTML;
+PLAIGBOT_HTML;
 
-	return '<div class="clearwrite-app" data-initial-tool="' . esc_attr( $tool ) . '">' . $markup . '</div>';
+	return '<div class="plaigbot-app" data-initial-tool="' . esc_attr( $tool ) . '">' . $markup . '</div>';
 }
-add_shortcode( 'clearwrite', 'clearwrite_shortcode' );
+add_shortcode( 'plaigbot', 'plaigbot_shortcode' );
 `;
 }
 
-const README_TXT = `=== ClearWrite Writing Tools ===
-Contributors: clearwrite
+const README_TXT = `=== PlaigBot Writing Tools ===
+Contributors: plaigbot
 Tags: paraphrasing, plagiarism checker, ai detector, readability, writing
 Requires at least: 5.0
 Tested up to: 6.6
@@ -253,7 +253,7 @@ writing improver. All processing happens in the visitor's browser.
 
 == Description ==
 
-ClearWrite adds four writing tools to any page via the [clearwrite] shortcode:
+PlaigBot adds four writing tools to any page via the [plaigbot] shortcode:
 
 * Paraphrasing Tool — four modes, every edit highlighted for review
 * Plagiarism Checker — compare a document against a source, matched passages highlighted
@@ -266,8 +266,8 @@ sent to your server or any third party.
 == Installation ==
 
 1. Upload the plugin ZIP via Plugins → Add New → Upload Plugin, then activate it.
-2. Create a page and add the shortcode: [clearwrite]
-3. Optional: start on a specific tool with [clearwrite tool="detector"]
+2. Create a page and add the shortcode: [plaigbot]
+3. Optional: start on a specific tool with [plaigbot tool="detector"]
    (valid values: paraphrase, plagiarism, detector, improver)
 
 Tip: use a full-width page template if your theme has one. Use the shortcode
@@ -298,7 +298,7 @@ function build() {
   // Strip comments first — the selector scoper must only ever see selector text.
   const css = fs.readFileSync(path.join(SRC, "css/styles.css"), "utf8")
     .replace(/\/\*[\s\S]*?\*\//g, "");
-  fs.writeFileSync(path.join(OUT, "assets/css/clearwrite.css"), scopeCss(css) + WP_EXTRA);
+  fs.writeFileSync(path.join(OUT, "assets/css/plaigbot.css"), scopeCss(css) + WP_EXTRA);
 
   for (const f of ["samples", "textkit", "paraphrase", "plagiarism", "detector", "improver"]) {
     fs.copyFileSync(path.join(SRC, "js", f + ".js"), path.join(OUT, "assets/js", f + ".js"));
@@ -308,7 +308,7 @@ function build() {
 
   const indexHtml = fs.readFileSync(path.join(SRC, "index.html"), "utf8");
   const markup = MARKUP.replace("__PANELS__", extractPanels(indexHtml));
-  fs.writeFileSync(path.join(OUT, "clearwrite.php"), phpFile(markup));
+  fs.writeFileSync(path.join(OUT, "plaigbot.php"), phpFile(markup));
   fs.writeFileSync(path.join(OUT, "readme.txt"), README_TXT);
 
   // Optional demo page that fakes a theme wrapper, for browser testing.
@@ -323,12 +323,12 @@ function build() {
   .theme-content { max-width: 1280px; margin: 0 auto; padding: 2rem 1rem; }
   .container { border: 3px dashed red; } /* deliberately hostile theme rule */
 </style>
-<link rel="stylesheet" href="assets/css/clearwrite.css"></head>
+<link rel="stylesheet" href="assets/css/plaigbot.css"></head>
 <body>
 <div class="theme-header">My WordPress Theme Header</div>
 <div class="theme-content">
 <p>Theme paragraph before the shortcode output.</p>
-<div class="clearwrite-app" data-initial-tool="detector">${markup}</div>
+<div class="plaigbot-app" data-initial-tool="detector">${markup}</div>
 <p>Theme paragraph after the shortcode output.</p>
 </div>
 <script src="assets/js/samples.js"></script>

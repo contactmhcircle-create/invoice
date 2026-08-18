@@ -1,4 +1,4 @@
-# ClearWrite — Free Writing Tools
+# PlaigBot — Free Writing Tools
 
 A fast, privacy-first suite of writing tools. Everything runs **entirely in the
 browser** — no server, no accounts, no text ever leaves the user's device.
@@ -22,7 +22,7 @@ browser** — no server, no accounts, no text ever leaves the user's device.
 ## Run locally
 
 ```bash
-cd clearwrite
+cd plaigbot
 python3 -m http.server 8080
 # open http://localhost:8080
 ```

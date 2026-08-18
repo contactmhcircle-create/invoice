@@ -1,5 +1,5 @@
-=== ClearWrite Writing Tools ===
-Contributors: clearwrite
+=== PlaigBot Writing Tools ===
+Contributors: plaigbot
 Tags: paraphrasing, plagiarism checker, ai detector, readability, writing
 Requires at least: 5.0
 Tested up to: 6.6
@@ -13,7 +13,7 @@ writing improver. All processing happens in the visitor's browser.
 
 == Description ==
 
-ClearWrite adds four writing tools to any page via the [clearwrite] shortcode:
+PlaigBot adds four writing tools to any page via the [plaigbot] shortcode:
 
 * Paraphrasing Tool — four modes, every edit highlighted for review
 * Plagiarism Checker — compare a document against a source, matched passages highlighted
@@ -26,8 +26,8 @@ sent to your server or any third party.
 == Installation ==
 
 1. Upload the plugin ZIP via Plugins → Add New → Upload Plugin, then activate it.
-2. Create a page and add the shortcode: [clearwrite]
-3. Optional: start on a specific tool with [clearwrite tool="detector"]
+2. Create a page and add the shortcode: [plaigbot]
+3. Optional: start on a specific tool with [plaigbot tool="detector"]
    (valid values: paraphrase, plagiarism, detector, improver)
 
 Tip: use a full-width page template if your theme has one. Use the shortcode
