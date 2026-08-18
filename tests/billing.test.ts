@@ -18,7 +18,13 @@ import {
   statutoryInterest,
   agedDebtors,
   invoiceWithDetail,
+  createManualInvoice,
+  addManualLine,
+  updateInvoiceLine,
+  removeInvoiceLine,
+  updateDraftInvoice,
 } from '../core/services/invoices.js';
+import { renderInvoiceHtml, invoiceLinesCsv } from '../core/services/invoiceDocument.js';
 import { auditSequence } from '../core/services/numbering.js';
 import { verifyAuditChain } from '../core/db/audit.js';
 import { trialBalance, profitAndLoss } from '../core/services/ledger.js';
@@ -463,5 +469,119 @@ describe('VAT', () => {
     expect(status.rollingTwelveMonthPence).toBeGreaterThan(8_000_000);
     expect(['watch', 'urgent']).toContain(status.severity);
     expect(status.message).toMatch(/threshold/i);
+  });
+});
+
+describe('Manual invoices and draft editing', () => {
+  it('creates a free-form invoice, edits its lines and issues it with a gapless number', () => {
+    const db = freshDb();
+    const client = makeOrg(db, { name: 'Direct Client Ltd', paymentTermsDays: 14 });
+
+    const invoice = createManualInvoice(db, { clientOrgId: client, poReference: 'PO-778' });
+    const guard = addManualLine(db, invoice, { description: 'Static guarding — March', netPence: 125_000 });
+    addManualLine(db, invoice, { description: 'Key holding call-out', quantity: 4, unitPricePence: 2_500 });
+
+    let detail = invoiceWithDetail(db, invoice)!;
+    expect(detail.status).toBe('draft');
+    expect(detail.lines).toHaveLength(2);
+    // Quantity is folded into the description; net is qty × unit.
+    expect(detail.lines[1].description).toContain('(4 × £25.00)');
+    expect(detail.lines[1].net_pence).toBe(10_000);
+    expect(detail.net_pence).toBe(135_000);
+
+    updateInvoiceLine(db, invoice, guard, { netPence: 120_000, description: 'Static guarding — March (revised)' });
+    detail = invoiceWithDetail(db, invoice)!;
+    expect(detail.net_pence).toBe(130_000);
+    expect(detail.lines[0].description).toContain('revised');
+
+    updateDraftInvoice(db, invoice, { po_reference: 'PO-779', notes: 'Agreed with A. Buyer' });
+    const number = issueInvoice(db, invoice);
+    expect(number).toMatch(/^CRV-INV-\d{4}-0001$/);
+    expect((invoiceWithDetail(db, invoice)! as any).po_reference).toBe('PO-779');
+  });
+
+  it('refuses every edit once the invoice has been issued', () => {
+    const db = freshDb();
+    const client = makeOrg(db);
+    const invoice = createManualInvoice(db, { clientOrgId: client });
+    const line = addManualLine(db, invoice, { description: 'Cover shift', netPence: 20_000 });
+    issueInvoice(db, invoice);
+
+    const frozen = /issued and is frozen/i;
+    expect(() => addManualLine(db, invoice, { description: 'Extra', netPence: 100 })).toThrow(frozen);
+    expect(() => updateInvoiceLine(db, invoice, line, { netPence: 1 })).toThrow(frozen);
+    expect(() => removeInvoiceLine(db, invoice, line)).toThrow(frozen);
+    expect(() => updateDraftInvoice(db, invoice, { po_reference: 'X' })).toThrow(frozen);
+  });
+
+  it('releases a timesheet back to the unbilled list when its last line is removed', () => {
+    const db = freshDb();
+    const { client, timesheet } = workedWeek(db);
+    const invoice = createInvoiceFromTimesheets(db, { clientOrgId: client, timesheetIds: [timesheet] });
+    expect(unbilledTimesheets(db)).toHaveLength(0);
+    // While it sits on the draft it cannot be pulled onto a second invoice.
+    expect(() =>
+      createInvoiceFromTimesheets(db, { clientOrgId: client, timesheetIds: [timesheet] }),
+    ).toThrow(/already on another invoice/i);
+
+    const lines = invoiceWithDetail(db, invoice)!.lines;
+    expect(lines).toHaveLength(5);
+    for (const l of lines.slice(0, 4)) removeInvoiceLine(db, invoice, l.id);
+    // Four of five removed — the timesheet is still attached to the draft.
+    expect(unbilledTimesheets(db)).toHaveLength(0);
+
+    removeInvoiceLine(db, invoice, lines[4].id);
+    expect(unbilledTimesheets(db)).toHaveLength(1);
+    expect((db.prepare('SELECT invoice_id FROM timesheets WHERE id = ?').get(timesheet) as any).invoice_id).toBeNull();
+    expect(invoiceWithDetail(db, invoice)!.net_pence).toBe(0);
+  });
+
+  it('recomputes the VAT position when the issue date moves across registration', () => {
+    const db = freshDb();
+    const client = makeOrg(db);
+    db.prepare(
+      `UPDATE company SET vat_registered = 1, vat_number = 'GB123456789', vat_registered_from = ? WHERE id = 1`,
+    ).run(addDays(today(), -5));
+
+    const invoice = createManualInvoice(db, { clientOrgId: client, issueDate: addDays(today(), -10) });
+    addManualLine(db, invoice, { description: 'Guarding services', netPence: 100_000 });
+
+    let inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice) as any;
+    expect(inv.vat_applied).toBe(0);
+    expect(inv.vat_pence).toBe(0);
+
+    updateDraftInvoice(db, invoice, { issue_date: today() });
+    inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice) as any;
+    expect(inv.vat_applied).toBe(1);
+    expect(inv.vat_pence).toBe(20_000);
+    expect(inv.gross_pence).toBe(120_000);
+
+    // And back again: the draft returns to the unregistered position.
+    updateDraftInvoice(db, invoice, { issue_date: addDays(today(), -10) });
+    inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice) as any;
+    expect(inv.vat_applied).toBe(0);
+    expect(inv.gross_pence).toBe(100_000);
+  });
+
+  it('renders the reference layout and exports the lines as CSV', () => {
+    const db = freshDb();
+    const client = makeOrg(db, { name: 'Platina-style Client Ltd' });
+    const invoice = createManualInvoice(db, { clientOrgId: client });
+    addManualLine(db, invoice, { description: 'Door supervision, w/e 10 Aug', netPence: 84_000 });
+    const number = issueInvoice(db, invoice);
+
+    const html = renderInvoiceHtml(db, invoice);
+    expect(html).toContain('BALANCE DUE');
+    expect(html).toContain('INVOICE TO');
+    expect(html).toContain('Please pay the invoice into the following account');
+    expect(html).toContain(number);
+    expect(html).toMatch(/not registered for VAT/i);
+
+    const csv = invoiceLinesCsv(db, invoice);
+    const rows = csv.split('\n');
+    expect(rows[0]).toBe('Invoice,Line,Date,Description,Hours,Unit price,Net,VAT,Currency');
+    expect(rows[1]).toContain('Door supervision');
+    expect(rows[1]).toContain('840.00');
+    expect(rows.at(-1)).toContain('TOTAL');
   });
 });

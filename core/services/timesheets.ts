@@ -355,6 +355,7 @@ export function unbilledTimesheets(db: Db, clientOrgId?: string) {
     JOIN organisations o ON o.id = a.client_org_id
     JOIN workers w ON w.id = t.worker_id
     WHERE t.status = 'approved'
+      AND t.invoice_id IS NULL
       ${clientOrgId ? 'AND a.client_org_id = ?' : ''}
     ORDER BY t.week_ending ASC, o.name ASC`;
 

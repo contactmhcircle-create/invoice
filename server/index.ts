@@ -12,7 +12,7 @@ import { openDatabase } from '../core/db/connection.js';
 import type { Db } from '../core/db/connection.js';
 import { recordAudit } from '../core/db/audit.js';
 import { attachDocument } from '../core/services/documents.js';
-import { renderInvoiceHtml } from '../core/services/invoiceDocument.js';
+import { renderInvoiceHtml, invoiceLinesCsv } from '../core/services/invoiceDocument.js';
 import { buildEnquiryPack, renderEnquiryPackHtml } from '../core/services/enquiryPack.js';
 import { importTideStatement, exportLedgerCsv, exportSalesCsv } from '../core/services/tide.js';
 import { generateIntermediaryReport, intermediaryReportCsv, markIntermediaryReportSubmitted } from '../core/services/statutory.js';
@@ -238,7 +238,22 @@ function requireCapability(request: any, reply: any, capability: any): boolean {
 app.get('/api/invoices/:id/document', async (request, reply) => {
   if (!requireCapability(request, reply, 'invoices.read')) return;
   const { id } = request.params as { id: string };
+  const { format = 'html' } = request.query as { format?: string };
   try {
+    if (format === 'doc') {
+      // Word opens HTML happily when served as msword — an editable copy with
+      // no dependency and no conversion step.
+      const inv = db.prepare('SELECT number FROM invoices WHERE id = ?').get(id) as any;
+      reply.type('application/msword');
+      reply.header('Content-Disposition', `attachment; filename="${inv?.number ?? 'invoice'}.doc"`);
+      return renderInvoiceHtml(db, id, true);
+    }
+    if (format === 'csv') {
+      const inv = db.prepare('SELECT number FROM invoices WHERE id = ?').get(id) as any;
+      reply.type('text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${inv?.number ?? 'invoice'}.csv"`);
+      return invoiceLinesCsv(db, id);
+    }
     reply.type('text/html; charset=utf-8');
     return renderInvoiceHtml(db, id);
   } catch (err) {

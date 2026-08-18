@@ -6,198 +6,228 @@ import { formatDateUK, hoursDecimal } from '../../shared/dates.js';
 /**
  * The invoice as the client sees it.
  *
- * A UK invoice from a limited company must show the company name, registered
- * office, registered number and — once registered — the VAT number and a VAT
- * breakdown. Cerviz is not VAT registered yet, so the document says so plainly
- * rather than leaving the client to wonder.
+ * The layout follows the reference the user supplied — company block top-left
+ * with a logo space right, a bold INVOICE title, INVOICE TO beside the
+ * number/date/due block, a FROM/TO period band, an accent-bar line table and a
+ * bold BALANCE DUE — with the statutory content the reference was missing kept
+ * in: registered office, company number, the VAT position and the late payment
+ * line.
  *
- * The shift-level backing schedule is what makes this an agency invoice rather
- * than a generic one: the client can see exactly who worked, when, for how long
- * and at what rate, which is what stops queries before they start.
+ * Formats: HTML (screen and print-to-PDF), and .doc — Word opens an HTML
+ * document served as application/msword, which gives an editable copy with no
+ * dependency. CSV of the lines is `invoiceLinesCsv`.
  */
 
 const esc = (s: unknown) =>
   String(s ?? '').replace(/[&<>"]/g, (ch) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] as string);
 
-export function renderInvoiceHtml(db: Db, invoiceId: string): string {
+export function renderInvoiceHtml(db: Db, invoiceId: string, forWord = false): string {
   const inv = invoiceWithDetail(db, invoiceId);
   if (!inv) throw new Error('Invoice not found');
 
-  const c = db.prepare('SELECT * FROM company WHERE id = 1').get() as any;
-  const brand = c?.brand_colour || '#1e3a5f';
+  const c = (db.prepare('SELECT * FROM company WHERE id = 1').get() ?? {}) as any;
+  const brand = c.brand_colour || '#c62828';
+  const cur = inv.currency;
 
-  const companyAddress = [c?.registered_address_1, c?.registered_address_2, c?.registered_city, c?.registered_postcode]
-    .filter(Boolean).map(esc).join('<br>');
+  const companyLines = [
+    c.registered_address_1, c.registered_address_2,
+    c.registered_city, 'United Kingdom', c.registered_postcode,
+    c.website,
+  ].filter(Boolean).map(esc);
 
-  const clientAddress = [inv.address_1, inv.address_2, inv.city, inv.postcode, inv.country !== 'United Kingdom' ? inv.country : null]
-    .filter(Boolean).map(esc).join('<br>');
+  const clientLines = [
+    inv.address_1, inv.address_2, inv.city, inv.postcode,
+    (inv.country ?? 'United Kingdom') !== 'United Kingdom' ? inv.country : null,
+  ].filter(Boolean).map(esc);
 
-  // Group lines by worker so a rota of eight officers reads as eight blocks
-  // rather than forty undifferentiated rows.
-  const byWorker = new Map<string, any[]>();
-  for (const l of inv.lines) {
-    const key = l.worker_id ?? 'other';
-    if (!byWorker.has(key)) byWorker.set(key, []);
-    byWorker.get(key)!.push(l);
-  }
+  const hasHours = inv.lines.some((l: any) => l.quantity_minutes !== null);
 
-  const workerNames = new Map<string, string>();
-  for (const key of byWorker.keys()) {
-    if (key === 'other') continue;
-    const w = db.prepare('SELECT first_name, last_name FROM workers WHERE id = ?').get(key) as any;
-    if (w) workerNames.set(key, `${w.first_name} ${w.last_name}`);
-  }
-
-  const scheduleRows = [...byWorker.entries()].map(([workerId, lines]) => {
-    const name = workerNames.get(workerId) ?? 'Services';
-    const subtotal = lines.reduce((a: number, l: any) => a + l.net_pence, 0);
-    const minutes = lines.reduce((a: number, l: any) => a + (l.quantity_minutes ?? 0), 0);
-
-    return `
-      <tr class="worker-row">
-        <td colspan="5"><strong>${esc(name)}</strong> — ${hoursDecimal(minutes)} hrs</td>
-        <td class="num"><strong>${formatMoney(subtotal, inv.currency)}</strong></td>
-      </tr>
-      ${lines.map((l: any) => `
-        <tr class="detail">
-          <td>${formatDateUK(l.work_date)}</td>
-          <td colspan="2">${esc(stripName(l.description, name))}</td>
-          <td class="num">${hoursDecimal(l.quantity_minutes ?? 0)}</td>
-          <td class="num">${formatMoney(l.unit_price_pence, inv.currency)}</td>
-          <td class="num">${formatMoney(l.net_pence, inv.currency)}</td>
-        </tr>`).join('')}`;
+  const lineRows = inv.lines.map((l: any) => {
+    const hours = l.quantity_minutes !== null ? (l.quantity_minutes / 60).toFixed(2) : '';
+    const rate = l.quantity_minutes !== null ? formatMoney(l.unit_price_pence, cur) : '';
+    return '<tr>'
+      + `<td class="desc">${esc(l.description)}</td>`
+      + (hasHours ? `<td class="num">${hours}</td><td class="num">${rate}</td>` : '')
+      + `<td class="num">${formatMoney(l.net_pence, cur)}</td>`
+      + '</tr>';
   }).join('');
 
-  const vatSection = inv.vat_applied
-    ? `<tr><td>VAT at 20%</td><td class="num">${formatMoney(inv.vat_pence, inv.currency)}</td></tr>`
+  const periodBand = inv.period_from ? `
+  <table class="period"><tr>
+    <td><span class="label">FROM</span><br>${formatDateUK(inv.period_from)}</td>
+    <td><span class="label">TO</span><br>${formatDateUK(inv.period_to)}</td>
+  </tr></table>` : '';
+
+  const vatRow = inv.vat_applied
+    ? `<tr><td>VAT TOTAL (20%)</td><td class="num">${formatMoney(inv.vat_pence, cur)}</td></tr>`
+    : `<tr><td>VAT TOTAL</td><td class="num">${formatMoney(0, cur)}</td></tr>`;
+
+  const outstanding = inv.gross_pence - inv.paid_pence;
+  const paidRows = inv.paid_pence > 0
+    ? `<tr><td>PAID</td><td class="num">${formatMoney(inv.paid_pence, cur)}</td></tr>`
     : '';
 
-  const backingNote = inv.backingTimesheets.length
-    ? `<div class="backing">
-         <strong>Supporting timesheets</strong><br>
-         ${inv.backingTimesheets.map((t: any) =>
-           `${esc(t.reference)} — ${esc(t.first_name)} ${esc(t.last_name)}, week ending ${formatDateUK(t.week_ending)}, ` +
-           `${hoursDecimal(t.total_minutes)} hrs, signed by ${esc(t.client_signatory ?? 'site')} on ${formatDateUK(t.client_signed_on)}`
-         ).join('<br>')}
-       </div>`
+  const backing = inv.backingTimesheets.length
+    ? `<div class="backing"><strong>Supporting timesheets</strong><br>${
+        inv.backingTimesheets.map((t: any) =>
+          `${esc(t.reference)} — ${esc(`${t.first_name} ${t.last_name}`)}`
+          + `, week ending ${formatDateUK(t.week_ending)}`
+          + `, ${hoursDecimal(t.total_minutes)} hrs`
+          + `, signed by ${esc(t.client_signatory ?? 'site')}`
+          + ` on ${formatDateUK(t.client_signed_on)}`,
+        ).join('<br>')}</div>`
     : '';
+
+  const bank = [
+    c.bank_account_name ? `Account name: ${esc(c.bank_account_name)}` : null,
+    c.bank_name ? `Bank: ${esc(c.bank_name)}` : null,
+    c.bank_sort_code ? `Sort code: ${esc(c.bank_sort_code)}` : null,
+    c.bank_account_number ? `Account number: ${esc(c.bank_account_number)}` : null,
+    c.bank_iban ? `IBAN: ${esc(c.bank_iban)}` : null,
+  ].filter(Boolean);
+
+  const regFooter = `${esc(c.legal_name ?? 'Cerviz Ltd')} is a company registered in England and Wales`
+    + (c.company_number ? `, company number ${esc(c.company_number)}` : '') + '.'
+    + (c.registered_address_1
+        ? ` Registered office: ${esc([c.registered_address_1, c.registered_city, c.registered_postcode].filter(Boolean).join(', '))}.`
+        : '')
+    + (c.vat_registered && c.vat_number ? ` VAT registration number ${esc(c.vat_number)}.` : '');
+
+  const voidStamp = inv.status === 'void' ? '<div class="void">VOID</div>' : '';
+  const draftStamp = inv.status === 'draft' ? '<div class="draft-note">DRAFT — not yet issued</div>' : '';
+
+  // Word needs absolute simplicity; print CSS is ignored there anyway.
+  const pageCss = forWord ? '' : `@page { size: A4; margin: 14mm; }
+  .void { position: fixed; top: 40%; left: 50%; transform: translate(-50%,-50%) rotate(-24deg);
+          font-size: 110px; font-weight: 800; color: rgba(198,40,40,0.14); letter-spacing: 6px; }`;
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${esc(inv.number ?? 'Draft invoice')}</title>
 <style>
-  @page { size: A4; margin: 14mm; }
+  ${pageCss}
   * { box-sizing: border-box; }
-  body { font: 12px/1.55 -apple-system, "Segoe UI", Roboto, Helvetica, sans-serif; color: #1a1a1a; margin: 0; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${brand}; padding-bottom: 14px; }
-  .company-name { font-size: 24px; font-weight: 700; color: ${brand}; letter-spacing: -0.3px; }
-  .doc-title { font-size: 26px; font-weight: 700; color: ${brand}; text-align: right; }
-  .doc-number { font-size: 14px; color: #444; text-align: right; margin-top: 2px; }
-  .parties { display: flex; gap: 32px; margin-top: 22px; }
-  .party { flex: 1; }
-  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.7px; color: #6b7280; margin-bottom: 4px; }
-  .facts { margin-top: 18px; width: 100%; border-collapse: collapse; }
-  .facts td { padding: 3px 0; }
-  .facts .k { color: #6b7280; width: 120px; }
-  table.lines { width: 100%; border-collapse: collapse; margin-top: 22px; }
-  table.lines th { background: ${brand}; color: #fff; padding: 7px 8px; font-size: 10px;
-                   text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
-  table.lines td { padding: 5px 8px; border-bottom: 1px solid #e8e8e8; }
-  tr.worker-row td { background: #f4f6f9; border-top: 1px solid #d8dee6; }
-  tr.detail td { font-size: 11px; color: #444; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .totals { margin-top: 16px; margin-left: auto; width: 300px; border-collapse: collapse; }
-  .totals td { padding: 5px 8px; }
-  .totals tr.grand td { border-top: 2px solid ${brand}; font-size: 15px; font-weight: 700; color: ${brand}; }
-  .pay { margin-top: 26px; background: #f4f6f9; border-left: 4px solid ${brand}; padding: 12px 14px; }
-  .vat-note { margin-top: 14px; font-size: 11px; color: #555; font-style: italic; }
-  .backing { margin-top: 18px; font-size: 10px; color: #666; border-top: 1px solid #e8e8e8; padding-top: 10px; }
-  .footer { margin-top: 26px; padding-top: 10px; border-top: 1px solid #e0e0e0; font-size: 9.5px; color: #777; }
-  .void { position: fixed; top: 40%; left: 50%; transform: translate(-50%,-50%) rotate(-24deg);
-          font-size: 110px; font-weight: 800; color: rgba(198,40,40,0.14); letter-spacing: 6px; }
+  body { font: 12.5px/1.5 Arial, Helvetica, sans-serif; color: #1a1a1a; margin: 0; padding: 8px; }
+  .rule-top { border-top: 4px solid #1a1a1a; margin-bottom: 18px; }
+  .head { width: 100%; border-collapse: collapse; }
+  .head td { vertical-align: top; }
+  .company-name { font-size: 15px; font-weight: bold; letter-spacing: 0.3px; }
+  .company-block { line-height: 1.55; }
+  .logo-cell { text-align: right; }
+  .logo-mark { display: inline-block; padding: 14px 20px; border: 2px solid ${brand};
+               color: ${brand}; font-weight: 800; font-size: 20px; letter-spacing: 3px; }
+  .doc-title { font-size: 30px; font-weight: 800; color: ${brand}; letter-spacing: 1px; margin: 14px 0 18px; }
+  .draft-note { display: inline-block; margin-left: 14px; font-size: 13px; color: #b26a00; font-weight: bold; }
+  .parties { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+  .parties td { vertical-align: top; width: 50%; padding-bottom: 8px; }
+  .label { font-size: 11px; font-weight: bold; letter-spacing: 0.5px; color: #444; }
+  .meta b { display: inline-block; min-width: 92px; }
+  .period { width: 100%; border-collapse: collapse; margin: 10px 0 4px;
+            border-top: 2px solid ${brand}; border-bottom: 1px solid #ddd; }
+  .period td { padding: 8px 4px; width: 50%; }
+  table.lines { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  table.lines th { background: ${brand}1a; color: ${brand}; text-align: left;
+                   font-size: 11px; letter-spacing: 0.6px; padding: 7px 8px;
+                   border-top: 2px solid ${brand}; border-bottom: 2px solid ${brand}; }
+  table.lines th.num, td.num { text-align: right; }
+  table.lines td { padding: 7px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .totals { margin-top: 10px; margin-left: auto; border-collapse: collapse; min-width: 300px; }
+  .totals td { padding: 4px 8px; }
+  .totals .num { text-align: right; min-width: 110px; }
+  .totals tr.balance td { font-size: 17px; font-weight: 800; border-top: 2px solid #1a1a1a; padding-top: 8px; }
+  .vat-note { margin-top: 12px; font-size: 11px; color: #555; font-style: italic; }
+  .pay { margin-top: 22px; }
+  .pay .heading { font-weight: bold; margin-bottom: 6px; }
+  .late { font-size: 10.5px; color: #555; margin-top: 8px; }
+  .backing { margin-top: 16px; padding-top: 8px; border-top: 1px solid #eee; font-size: 10px; color: #666; }
+  .footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 9.5px; color: #777; }
 </style></head><body>
 
-${inv.status === 'void' ? '<div class="void">VOID</div>' : ''}
+${voidStamp}
+<div class="rule-top"></div>
 
-<div class="head">
-  <div>
-    <div class="company-name">${esc(c?.trading_name || c?.legal_name || 'Cerviz Ltd')}</div>
-    <div style="margin-top:6px;color:#555">${companyAddress}</div>
-    ${c?.phone ? `<div style="color:#555">${esc(c.phone)}</div>` : ''}
-    ${c?.email ? `<div style="color:#555">${esc(c.email)}</div>` : ''}
-  </div>
-  <div>
-    <div class="doc-title">INVOICE</div>
-    <div class="doc-number">${esc(inv.number ?? 'DRAFT — not yet issued')}</div>
-  </div>
-</div>
+<table class="head"><tr>
+  <td class="company-block">
+    <div class="company-name">${esc(String(c.trading_name || c.legal_name || 'CERVIZ LTD').toUpperCase())}</div>
+    ${companyLines.join('<br>')}
+    ${c.company_number ? `<br>Company Registration No.: ${esc(c.company_number)}` : ''}
+  </td>
+  <td class="logo-cell"><span class="logo-mark">${esc(String(c.trading_name || c.legal_name || 'CERVIZ').toUpperCase())}</span></td>
+</tr></table>
 
-<div class="parties">
-  <div class="party">
-    <div class="label">Invoice to</div>
+<div class="doc-title">INVOICE${draftStamp}</div>
+
+<table class="parties"><tr>
+  <td>
+    <div class="label">INVOICE TO</div>
     <strong>${esc(inv.client_legal_name || inv.client_name)}</strong><br>
-    ${clientAddress}
-    ${inv.client_company_number ? `<br><span style="color:#6b7280">Company no. ${esc(inv.client_company_number)}</span>` : ''}
-    ${inv.client_vat_number ? `<br><span style="color:#6b7280">VAT no. ${esc(inv.client_vat_number)}</span>` : ''}
-  </div>
-  <div class="party">
-    <table class="facts">
-      <tr><td class="k">Invoice date</td><td>${formatDateUK(inv.issue_date)}</td></tr>
-      <tr><td class="k">Tax point</td><td>${formatDateUK(inv.tax_point_date)}</td></tr>
-      <tr><td class="k">Payment due</td><td><strong>${formatDateUK(inv.due_date)}</strong></td></tr>
-      ${inv.po_reference ? `<tr><td class="k">Your PO</td><td>${esc(inv.po_reference)}</td></tr>` : ''}
-      ${inv.period_from ? `<tr><td class="k">Period</td><td>${formatDateUK(inv.period_from)} – ${formatDateUK(inv.period_to)}</td></tr>` : ''}
-      ${inv.currency !== 'GBP' ? `<tr><td class="k">Currency</td><td>${esc(inv.currency)} (rate ${inv.fx_rate})</td></tr>` : ''}
-    </table>
-  </div>
-</div>
+    ${clientLines.join('<br>')}
+    ${inv.client_company_number ? `<br><span style="color:#777">Company no. ${esc(inv.client_company_number)}</span>` : ''}
+  </td>
+  <td class="meta">
+    <div><b>INVOICE NO.</b> ${esc(inv.number ?? 'DRAFT')}</div>
+    <div><b>DATE</b> ${formatDateUK(inv.issue_date)}</div>
+    <div><b>DUE DATE</b> ${formatDateUK(inv.due_date)}</div>
+    ${inv.po_reference ? `<div><b>YOUR PO</b> ${esc(inv.po_reference)}</div>` : ''}
+    ${cur !== 'GBP' ? `<div><b>CURRENCY</b> ${esc(cur)}</div>` : ''}
+  </td>
+</tr></table>
+
+${periodBand}
 
 <table class="lines">
   <thead><tr>
-    <th style="width:80px">Date</th><th colspan="2">Description</th>
-    <th class="num" style="width:60px">Hours</th>
-    <th class="num" style="width:80px">Rate</th>
-    <th class="num" style="width:90px">Amount</th>
+    <th>DESCRIPTION</th>
+    ${hasHours ? '<th class="num" style="width:70px">HOURS</th><th class="num" style="width:90px">RATE</th>' : ''}
+    <th class="num" style="width:110px">AMOUNT</th>
   </tr></thead>
-  <tbody>${scheduleRows}</tbody>
+  <tbody>${lineRows}</tbody>
 </table>
 
 <table class="totals">
-  <tr><td>Subtotal</td><td class="num">${formatMoney(inv.net_pence, inv.currency)}</td></tr>
-  ${vatSection}
-  <tr class="grand"><td>Total due</td><td class="num">${formatMoney(inv.gross_pence, inv.currency)}</td></tr>
-  ${inv.paid_pence > 0 ? `
-    <tr><td>Paid</td><td class="num">${formatMoney(inv.paid_pence, inv.currency)}</td></tr>
-    <tr class="grand"><td>Outstanding</td><td class="num">${formatMoney(inv.outstandingPence, inv.currency)}</td></tr>` : ''}
+  <tr><td>SUBTOTAL</td><td class="num">${formatMoney(inv.net_pence, cur)}</td></tr>
+  ${vatRow}
+  <tr><td>TOTAL</td><td class="num">${formatMoney(inv.gross_pence, cur)}</td></tr>
+  ${paidRows}
+  <tr class="balance"><td>BALANCE DUE</td><td class="num">${formatMoney(outstanding, cur)}</td></tr>
 </table>
 
 ${inv.vat_note ? `<div class="vat-note">${esc(inv.vat_note)}</div>` : ''}
 
 <div class="pay">
-  <strong>Payment details</strong><br>
-  ${c?.bank_account_name ? `Account name: ${esc(c.bank_account_name)}<br>` : ''}
-  ${c?.bank_sort_code ? `Sort code: ${esc(c.bank_sort_code)}<br>` : ''}
-  ${c?.bank_account_number ? `Account number: ${esc(c.bank_account_number)}<br>` : ''}
-  ${c?.bank_iban ? `IBAN: ${esc(c.bank_iban)}<br>` : ''}
-  <strong>Please quote reference ${esc(inv.number ?? '')}</strong><br>
-  <span style="color:#555">Payment terms: ${formatDateUK(inv.due_date)}. Late payment may incur statutory
-  interest at the Bank of England base rate plus 8% together with fixed compensation under the
-  Late Payment of Commercial Debts (Interest) Act 1998.</span>
+  <div class="heading">Please pay the invoice into the following account:</div>
+  ${bank.join('<br>')}
+  ${inv.number ? `<br><strong>Please quote reference ${esc(inv.number)}</strong>` : ''}
+  <div class="late">Late payment may incur statutory interest at the Bank of England base rate plus 8%
+  together with fixed compensation under the Late Payment of Commercial Debts (Interest) Act 1998.</div>
 </div>
 
-${backingNote}
+${backing}
 
-<div class="footer">
-  ${esc(c?.legal_name ?? 'Cerviz Ltd')} is a company registered in England and Wales${c?.company_number ? `, company number ${esc(c.company_number)}` : ''}.
-  ${c?.registered_address_1 ? `Registered office: ${[c.registered_address_1, c.registered_city, c.registered_postcode].filter(Boolean).map(esc).join(', ')}.` : ''}
-  ${c?.vat_registered && c?.vat_number ? `VAT registration number ${esc(c.vat_number)}.` : ''}
-  ${c?.invoice_footer ? `<br>${esc(c.invoice_footer)}` : ''}
-</div>
+<div class="footer">${regFooter}${c.invoice_footer ? `<br>${esc(c.invoice_footer)}` : ''}</div>
 
 </body></html>`;
 }
 
-/** Removes a leading "Name — " prefix so it is not repeated under the worker heading. */
-function stripName(description: string, name: string): string {
-  return description.startsWith(`${name} — `) ? description.slice(name.length + 3) : description;
+export function invoiceLinesCsv(db: Db, invoiceId: string): string {
+  const inv = invoiceWithDetail(db, invoiceId);
+  if (!inv) throw new Error('Invoice not found');
+
+  const cell = (v: unknown) => {
+    const s = String(v ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const pounds = (pence: number) => (pence / 100).toFixed(2);
+
+  const lines = ['Invoice,Line,Date,Description,Hours,Unit price,Net,VAT,Currency'];
+  for (const l of inv.lines) {
+    lines.push([
+      inv.number ?? 'DRAFT', l.line_no, l.work_date ?? '', l.description,
+      l.quantity_minutes !== null ? (l.quantity_minutes / 60).toFixed(2) : '',
+      pounds(l.unit_price_pence), pounds(l.net_pence), pounds(l.vat_pence), inv.currency,
+    ].map(cell).join(','));
+  }
+  lines.push([inv.number ?? 'DRAFT', '', '', 'TOTAL', '', '',
+    pounds(inv.net_pence), pounds(inv.vat_pence), inv.currency].map(cell).join(','));
+  return lines.join('\n');
 }

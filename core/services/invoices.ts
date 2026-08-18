@@ -64,6 +64,11 @@ export function createInvoiceFromTimesheets(db: Db, input: CreateInvoiceInput): 
     if (ts.client_org_id !== input.clientOrgId) {
       throw new Error(`Timesheet ${ts.reference} belongs to a different client.`);
     }
+    if (ts.invoice_id) {
+      throw new Error(
+        `Timesheet ${ts.reference} is already on another invoice. Remove it from that draft first.`,
+      );
+    }
   }
 
   if (client.po_required && !input.poReference && !timesheets[0].po_reference) {
@@ -188,6 +193,166 @@ export function createInvoiceFromTimesheets(db: Db, input: CreateInvoiceInput): 
   });
 
   return id;
+}
+
+/**
+ * A manual invoice: no timesheets behind it, for goods-and-services billing.
+ * Lines are added and edited while the invoice is a draft; issue freezes it
+ * exactly like a timesheet-backed one.
+ */
+export function createManualInvoice(db: Db, input: {
+  clientOrgId: string; issueDate?: IsoDate; taxPointDate?: IsoDate;
+  periodFrom?: IsoDate; periodTo?: IsoDate; poReference?: string;
+  currency?: string; fxRate?: number; notes?: string;
+}): string {
+  const client = db.prepare('SELECT * FROM organisations WHERE id = ?').get(input.clientOrgId) as any;
+  if (!client) throw new Error('Client not found');
+
+  const issueDate = input.issueDate ?? today();
+  const vat = vatPolicyFor(db, issueDate, client.country);
+  const id = newId('inv');
+  const now = nowInstant();
+
+  db.prepare(
+    `INSERT INTO invoices
+       (id, client_org_id, issue_date, tax_point_date, due_date, period_from, period_to,
+        po_reference, currency, fx_rate, vat_applied, vat_note, status, notes, terms,
+        created_at, updated_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'draft', ?,?,?,?)`,
+  ).run(
+    id, input.clientOrgId, issueDate, input.taxPointDate ?? issueDate,
+    addDays(issueDate, client.payment_terms_days ?? 30),
+    input.periodFrom ?? null, input.periodTo ?? null, input.poReference ?? null,
+    input.currency ?? client.currency ?? 'GBP', input.fxRate ?? 1.0,
+    vat.applies ? 1 : 0, vat.note, input.notes ?? null,
+    (db.prepare('SELECT invoice_terms FROM company WHERE id = 1').get() as any)?.invoice_terms ?? null,
+    now, now,
+  );
+
+  recordAudit(db, {
+    entityType: 'invoice', entityId: id, action: 'created',
+    summary: `Draft manual invoice created for ${client.name}`, after: input,
+  });
+  return id;
+}
+
+function assertDraft(db: Db, invoiceId: string) {
+  const inv = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId) as any;
+  if (!inv) throw new Error('Invoice not found');
+  if (inv.status !== 'draft') {
+    throw new Error('This invoice has been issued and is frozen. Void it and reissue, or raise a credit note.');
+  }
+  return inv;
+}
+
+/** Add a free-form line to a draft. Quantity is plain units, not minutes. */
+export function addManualLine(db: Db, invoiceId: string, l: {
+  description: string; quantity?: number; unitPricePence?: number;
+  netPence?: number; workDate?: IsoDate;
+}): string {
+  const inv = assertDraft(db, invoiceId);
+  const clientCountry = (db.prepare('SELECT country FROM organisations WHERE id = ?')
+    .get(inv.client_org_id) as any)?.country ?? 'United Kingdom';
+  const vat = vatPolicyFor(db, inv.issue_date, clientCountry);
+
+  const qty = Math.max(1, l.quantity ?? 1);
+  const unit = l.unitPricePence ?? 0;
+  const net = l.netPence ?? Math.round(qty * unit);
+  if (net === 0 && unit === 0) throw new Error('Give the line an amount.');
+  if (!l.description?.trim()) throw new Error('Give the line a description.');
+
+  let description = l.description.trim();
+  if (qty !== 1) description += ` (${qty} × £${(unit / 100).toFixed(2)})`;
+
+  const lineNo = ((db.prepare('SELECT COALESCE(MAX(line_no),0) AS n FROM invoice_lines WHERE invoice_id = ?')
+    .get(invoiceId) as any).n as number) + 1;
+
+  const id = newId('invl');
+  db.prepare(
+    `INSERT INTO invoice_lines
+       (id, invoice_id, line_no, description, work_date, quantity_minutes, unit_price_pence,
+        net_pence, vat_rate, vat_code, vat_pence, created_at)
+     VALUES (?,?,?,?,?,NULL,?,?,?,?,?,?)`,
+  ).run(id, invoiceId, lineNo, description, l.workDate ?? null, unit || net, net,
+    vat.ratePercent, vat.code, vat.applies ? vatOn(net, vat.ratePercent) : 0, nowInstant());
+
+  recalculateInvoice(db, invoiceId);
+  return id;
+}
+
+export function updateInvoiceLine(db: Db, invoiceId: string, lineId: string, changes: {
+  description?: string; netPence?: number; unitPricePence?: number;
+}): void {
+  const inv = assertDraft(db, invoiceId);
+  const line = db.prepare('SELECT * FROM invoice_lines WHERE id = ? AND invoice_id = ?')
+    .get(lineId, invoiceId) as any;
+  if (!line) throw new Error('Line not found');
+
+  const clientCountry = (db.prepare('SELECT country FROM organisations WHERE id = ?')
+    .get(inv.client_org_id) as any)?.country ?? 'United Kingdom';
+  const vat = vatPolicyFor(db, inv.issue_date, clientCountry);
+
+  const description = changes.description !== undefined ? changes.description.trim() : line.description;
+  if (!description) throw new Error('A line needs a description.');
+  const net = changes.netPence !== undefined ? changes.netPence : line.net_pence;
+  const unit = changes.unitPricePence !== undefined ? changes.unitPricePence : line.unit_price_pence;
+
+  db.prepare('UPDATE invoice_lines SET description = ?, net_pence = ?, unit_price_pence = ?, vat_pence = ? WHERE id = ?')
+    .run(description, net, unit, vat.applies ? vatOn(net, vat.ratePercent) : 0, lineId);
+  recalculateInvoice(db, invoiceId);
+}
+
+export function removeInvoiceLine(db: Db, invoiceId: string, lineId: string): void {
+  assertDraft(db, invoiceId);
+  const line = db.prepare('SELECT * FROM invoice_lines WHERE id = ? AND invoice_id = ?')
+    .get(lineId, invoiceId) as any;
+  if (!line) throw new Error('Line not found');
+
+  db.prepare('DELETE FROM invoice_lines WHERE id = ?').run(lineId);
+  // Releasing the last line of a timesheet must release the timesheet, or the
+  // work silently vanishes from the unbilled list.
+  if (line.timesheet_id) {
+    const remaining = (db.prepare('SELECT COUNT(*) AS n FROM invoice_lines WHERE invoice_id = ? AND timesheet_id = ?')
+      .get(invoiceId, line.timesheet_id) as any).n;
+    if (remaining === 0) {
+      db.prepare(`UPDATE timesheets SET invoice_id = NULL, updated_at = ? WHERE id = ? AND status <> 'invoiced'`)
+        .run(nowInstant(), line.timesheet_id);
+    }
+  }
+  recalculateInvoice(db, invoiceId);
+}
+
+/** Edit draft header fields. Moving the issue date recomputes the VAT position. */
+export function updateDraftInvoice(db: Db, invoiceId: string, changes: Record<string, unknown>): void {
+  const inv = assertDraft(db, invoiceId);
+  const allowed = ['issue_date', 'tax_point_date', 'due_date', 'po_reference', 'notes',
+    'period_from', 'period_to'];
+  const fields = allowed.filter((f) => changes[f] !== undefined);
+  if (fields.length === 0) return;
+
+  db.prepare(`UPDATE invoices SET ${fields.map((f) => `${f} = ?`).join(', ')}, updated_at = ? WHERE id = ?`)
+    .run(...fields.map((f) => changes[f]), nowInstant(), invoiceId);
+
+  if (fields.includes('issue_date')) {
+    const clientCountry = (db.prepare('SELECT country FROM organisations WHERE id = ?')
+      .get(inv.client_org_id) as any)?.country ?? 'United Kingdom';
+    const vat = vatPolicyFor(db, changes.issue_date as string, clientCountry);
+    db.prepare('UPDATE invoices SET vat_applied = ?, vat_note = ? WHERE id = ?')
+      .run(vat.applies ? 1 : 0, vat.note, invoiceId);
+    for (const l of db.prepare('SELECT id, net_pence FROM invoice_lines WHERE invoice_id = ?')
+      .all(invoiceId) as any[]) {
+      db.prepare('UPDATE invoice_lines SET vat_rate = ?, vat_code = ?, vat_pence = ? WHERE id = ?')
+        .run(vat.ratePercent, vat.code, vat.applies ? vatOn(l.net_pence, vat.ratePercent) : 0, l.id);
+    }
+  }
+  recalculateInvoice(db, invoiceId);
+
+  recordAudit(db, {
+    entityType: 'invoice', entityId: invoiceId, action: 'draft_edited',
+    summary: `Draft invoice edited: ${fields.join(', ')}`,
+    before: Object.fromEntries(fields.map((f) => [f, inv[f]])),
+    after: Object.fromEntries(fields.map((f) => [f, changes[f]])),
+  });
 }
 
 export function recalculateInvoice(db: Db, invoiceId: string): void {

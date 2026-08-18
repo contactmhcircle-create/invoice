@@ -1,0 +1,33 @@
+# Cerviz Back Office — routing and protection for Apache/LiteSpeed shared hosting.
+
+Options -Indexes
+
+# The data directory (database, evidence scans, backups) must never be served.
+# The installer also writes its own deny file inside it; this is the outer wall.
+RewriteEngine On
+RewriteRule ^data(/|$) - [F,L]
+RewriteRule ^app(/|$) - [F,L]
+RewriteRule ^migrations(/|$) - [F,L]
+
+# Real files (the SPA assets) are served directly; everything else — the API
+# and the SPA's client-side routes — goes through the front controller.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^ index.php [QSA,L]
+
+# The database must never be downloadable, wherever it ends up living.
+<FilesMatch "\.(sqlite|sqlite-wal|sqlite-shm|db)$">
+  Require all denied
+</FilesMatch>
+
+# Uploaded evidence can be a phone photo of a signed timesheet.
+<IfModule mod_php.c>
+  php_value upload_max_filesize 25M
+  php_value post_max_size 30M
+</IfModule>
+
+# Hashed assets never change; cache them hard.
+<IfModule mod_headers.c>
+  <FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>

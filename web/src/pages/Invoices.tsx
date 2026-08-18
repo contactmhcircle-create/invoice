@@ -8,6 +8,7 @@ export default function Invoices({ onChange }: { onChange: () => void }) {
   const { data: aged } = useQuery<any>('invoices:agedDebtors');
   const [selected, setSelected] = useState<string | null>(null);
   const [billing, setBilling] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = () => { refresh(); refreshUnbilled(); onChange(); };
@@ -24,9 +25,12 @@ export default function Invoices({ onChange }: { onChange: () => void }) {
             issued invoice is frozen — corrections go out as credit notes.
           </div>
         </div>
-        <button className="btn primary" disabled={!unbilled?.length} onClick={() => setBilling(true)}>
-          Bill approved timesheets
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" onClick={() => setCreating(true)}>New invoice</button>
+          <button className="btn primary" disabled={!unbilled?.length} onClick={() => setBilling(true)}>
+            Bill approved timesheets
+          </button>
+        </div>
       </div>
 
       <ErrorNote error={error} />
@@ -97,6 +101,12 @@ export default function Invoices({ onChange }: { onChange: () => void }) {
           onDone={(id) => { setBilling(false); reload(); setSelected(id); }}
         />
       )}
+      {creating && (
+        <NewManualInvoice
+          onClose={() => setCreating(false)}
+          onDone={(id) => { setCreating(false); reload(); setSelected(id); }}
+        />
+      )}
     </div>
   );
 }
@@ -107,6 +117,7 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
   const [voiding, setVoiding] = useState(false);
   const [paying, setPaying] = useState(false);
   const [crediting, setCrediting] = useState(false);
+  const [editingHeader, setEditingHeader] = useState(false);
 
   const reload = () => { refresh(); onChange(); };
 
@@ -126,6 +137,12 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
           <button className="btn" onClick={onClose}>Close</button>
           <button className="btn" onClick={() => openDocument(`/api/invoices/${id}/document`)}>
             Print / save PDF
+          </button>
+          <button className="btn" onClick={() => openDocument(`/api/invoices/${id}/document?format=doc`)}>
+            Word
+          </button>
+          <button className="btn" onClick={() => openDocument(`/api/invoices/${id}/document?format=csv`)}>
+            CSV
           </button>
           {inv.status === 'draft' && (
             <button className="btn primary" onClick={() => act(() => call('invoices:issue', { id }))}>
@@ -152,6 +169,12 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
           <span className="small muted">
             Issued {ukDate(inv.issue_date)} · due {ukDate(inv.due_date)}
             {inv.po_reference ? ` · PO ${inv.po_reference}` : ''}
+            {inv.status === 'draft' && (
+              <>
+                {' · '}
+                <a href="#" onClick={(e) => { e.preventDefault(); setEditingHeader(true); }}>edit details</a>
+              </>
+            )}
           </span>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -180,20 +203,7 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
       )}
 
       <strong>Lines</strong>
-      <table style={{ marginTop: 8 }}>
-        <thead><tr><th>Date</th><th>Description</th><th className="num">Hours</th><th className="num">Rate</th><th className="num">Net</th></tr></thead>
-        <tbody>
-          {inv.lines.map((l: any) => (
-            <tr key={l.id}>
-              <td className="nowrap">{ukDate(l.work_date)}</td>
-              <td className="small">{l.description}</td>
-              <td className="num">{hours(l.quantity_minutes)}</td>
-              <td className="num">{money(l.unit_price_pence, inv.currency)}</td>
-              <td className="num">{money(l.net_pence, inv.currency)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <DraftLines invoice={inv} editable={inv.status === 'draft'} onChange={reload} onError={setError} />
 
       <div className="divider" />
       <strong>Evidence chain</strong>
@@ -278,6 +288,289 @@ function InvoiceDetail({ id, onClose, onChange }: { id: string; onClose: () => v
           onDone={() => { setPaying(false); reload(); }}
         />
       )}
+      {editingHeader && (
+        <EditInvoiceHeader
+          invoice={inv}
+          onClose={() => setEditingHeader(false)}
+          onDone={() => { setEditingHeader(false); reload(); }}
+        />
+      )}
+    </Modal>
+  );
+}
+
+/** Pounds-and-pence input to integer pence; forgiving about £, commas and spaces. */
+function toPence(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = parseFloat(value.replace(/[£,\s]/g, ''));
+  if (!Number.isFinite(n)) throw new Error('Enter a valid amount.');
+  return Math.round(n * 100);
+}
+
+function DraftLines({
+  invoice, editable, onChange, onError,
+}: { invoice: any; editable: boolean; onChange: () => void; onError: (e: string | null) => void }) {
+  const [editing, setEditing] = useState<any | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const act = async (fn: () => Promise<unknown>) => {
+    try { onError(null); await fn(); onChange(); } catch (e: any) { onError(e.message); }
+  };
+
+  return (
+    <>
+      <table style={{ marginTop: 8 }}>
+        <thead>
+          <tr>
+            <th>Date</th><th>Description</th><th className="num">Hours</th>
+            <th className="num">Rate</th><th className="num">Net</th>
+            {editable && <th></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {invoice.lines.map((l: any) => (
+            <tr key={l.id}>
+              <td className="nowrap">{ukDate(l.work_date)}</td>
+              <td className="small">{l.description}</td>
+              <td className="num">{hours(l.quantity_minutes)}</td>
+              <td className="num">{money(l.unit_price_pence, invoice.currency)}</td>
+              <td className="num">{money(l.net_pence, invoice.currency)}</td>
+              {editable && (
+                <td className="nowrap" style={{ textAlign: 'right' }}>
+                  <button className="btn small" onClick={() => setEditing(l)}>Edit</button>{' '}
+                  <button
+                    className="btn small danger"
+                    onClick={() => act(() => call('invoices:removeLine', { invoiceId: invoice.id, lineId: l.id }))}
+                  >
+                    Remove
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+          {!invoice.lines.length && (
+            <tr><td colSpan={editable ? 6 : 5} className="muted small">No lines yet — add one below.</td></tr>
+          )}
+        </tbody>
+      </table>
+      {editable && (
+        <div style={{ marginTop: 8 }}>
+          <button className="btn small" onClick={() => setAdding(true)}>Add line</button>
+        </div>
+      )}
+
+      {adding && (
+        <LineForm
+          title="Add line"
+          onClose={() => setAdding(false)}
+          onSave={async (v) => {
+            await act(() => call('invoices:addLine', {
+              invoiceId: invoice.id,
+              line: {
+                description: v.description,
+                quantity: v.quantity,
+                unitPricePence: v.unitPricePence ?? undefined,
+                netPence: v.netPence ?? undefined,
+                workDate: v.workDate || undefined,
+              },
+            }));
+            setAdding(false);
+          }}
+        />
+      )}
+      {editing && (
+        <LineForm
+          title="Edit line"
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSave={async (v) => {
+            await act(() => call('invoices:updateLine', {
+              invoiceId: invoice.id,
+              lineId: editing.id,
+              changes: {
+                description: v.description,
+                netPence: v.netPence ?? undefined,
+                unitPricePence: v.unitPricePence ?? undefined,
+              },
+            }));
+            setEditing(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function LineForm({
+  title, initial, onClose, onSave,
+}: {
+  title: string;
+  initial?: any;
+  onClose: () => void;
+  onSave: (v: { description: string; quantity?: number; unitPricePence: number | null; netPence: number | null; workDate?: string }) => Promise<void>;
+}) {
+  const editingExisting = Boolean(initial);
+  const [description, setDescription] = useState<string>(initial?.description ?? '');
+  const [quantity, setQuantity] = useState('1');
+  const [unitPrice, setUnitPrice] = useState(initial ? (initial.unit_price_pence / 100).toFixed(2) : '');
+  const [amount, setAmount] = useState(initial ? (initial.net_pence / 100).toFixed(2) : '');
+  const [workDate, setWorkDate] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    try {
+      if (!description.trim()) throw new Error('Give the line a description.');
+      const qty = parseFloat(quantity || '1');
+      if (!Number.isFinite(qty) || qty <= 0) throw new Error('Enter a valid quantity.');
+      const unitPence = toPence(unitPrice);
+      const netPence = toPence(amount);
+      if (unitPence === null && netPence === null) throw new Error('Give the line a unit price or an amount.');
+      await onSave({
+        description: description.trim(),
+        quantity: editingExisting ? undefined : qty,
+        unitPricePence: unitPence,
+        netPence,
+        workDate: workDate || undefined,
+      });
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save}>Save</button></>}
+    >
+      <ErrorNote error={error} />
+      <Field label="Description">
+        <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} autoFocus />
+      </Field>
+      <div className="grid cols-3">
+        {!editingExisting && (
+          <Field label="Quantity">
+            <input type="text" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          </Field>
+        )}
+        <Field label="Unit price (£)">
+          <input type="text" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} />
+        </Field>
+        <Field label="Amount (£)" hint="Overrides quantity × unit price if set.">
+          <input type="text" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+      </div>
+      {!editingExisting && (
+        <Field label="Work date (optional)">
+          <input type="date" value={workDate} onChange={(e) => setWorkDate(e.target.value)} />
+        </Field>
+      )}
+    </Modal>
+  );
+}
+
+function EditInvoiceHeader({
+  invoice, onClose, onDone,
+}: { invoice: any; onClose: () => void; onDone: () => void }) {
+  const [issueDate, setIssueDate] = useState<string>(invoice.issue_date ?? '');
+  const [dueDate, setDueDate] = useState<string>(invoice.due_date ?? '');
+  const [poReference, setPoReference] = useState<string>(invoice.po_reference ?? '');
+  const [periodFrom, setPeriodFrom] = useState<string>(invoice.period_from ?? '');
+  const [periodTo, setPeriodTo] = useState<string>(invoice.period_to ?? '');
+  const [notes, setNotes] = useState<string>(invoice.notes ?? '');
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    try {
+      await call('invoices:updateDraft', {
+        id: invoice.id,
+        changes: {
+          issue_date: issueDate || undefined,
+          due_date: dueDate || undefined,
+          po_reference: poReference || null,
+          period_from: periodFrom || null,
+          period_to: periodTo || null,
+          notes: notes || null,
+        },
+      });
+      onDone();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <Modal
+      title="Edit invoice details"
+      onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save}>Save</button></>}
+    >
+      <ErrorNote error={error} />
+      <div className="grid cols-2">
+        <Field label="Invoice date" hint="Moving the date re-checks the VAT position for that day.">
+          <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+        </Field>
+        <Field label="Due date">
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </Field>
+      </div>
+      <div className="grid cols-2">
+        <Field label="Period from"><input type="date" value={periodFrom} onChange={(e) => setPeriodFrom(e.target.value)} /></Field>
+        <Field label="Period to"><input type="date" value={periodTo} onChange={(e) => setPeriodTo(e.target.value)} /></Field>
+      </div>
+      <Field label="Purchase order reference">
+        <input type="text" value={poReference} onChange={(e) => setPoReference(e.target.value)} />
+      </Field>
+      <Field label="Notes">
+        <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </Field>
+    </Modal>
+  );
+}
+
+function NewManualInvoice({ onClose, onDone }: { onClose: () => void; onDone: (id: string) => void }) {
+  const { data: clients, loading } = useQuery<any[]>('orgs:list', { isClient: true });
+  const [clientId, setClientId] = useState('');
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [poReference, setPoReference] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const create = async () => {
+    try {
+      const chosen = clientId || clients?.[0]?.id;
+      if (!chosen) throw new Error('Add a client first, under Clients.');
+      const id = await call<string>('invoices:createManual', {
+        clientOrgId: chosen,
+        issueDate,
+        poReference: poReference || undefined,
+      });
+      onDone(id);
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <Modal
+      title="New invoice"
+      onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={create}>Create draft</button></>}
+    >
+      <ErrorNote error={error} />
+      <p className="small muted" style={{ marginTop: 0 }}>
+        A free-form invoice with lines you type yourself — for anything not backed by timesheets.
+        It stays an editable draft until you issue it, when it takes the next number in the series
+        and freezes.
+      </p>
+      {loading ? <Loading /> : (
+        <Field label="Client">
+          <select value={clientId || clients?.[0]?.id || ''} onChange={(e) => setClientId(e.target.value)}>
+            {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </Field>
+      )}
+      <div className="grid cols-2">
+        <Field label="Invoice date">
+          <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+        </Field>
+        <Field label="Purchase order reference (optional)">
+          <input type="text" value={poReference} onChange={(e) => setPoReference(e.target.value)} />
+        </Field>
+      </div>
     </Modal>
   );
 }

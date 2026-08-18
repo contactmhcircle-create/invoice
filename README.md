@@ -13,20 +13,20 @@ client requirement → worker vetting → compliance pack → shift allocation
     → timesheet (signed on site) → invoice → umbrella cost → margin
 ```
 
-Runs as a single container with a local SQLite database. Multiple users with
-distinct roles, mandatory two-factor authentication, and access from any device.
+Multiple users with distinct roles, mandatory two-factor authentication, and
+access from any device. Two interchangeable backends share the same database
+schema, API contract and React front-end:
 
-**To put it online at `invoice.cerviz.co.uk`, see
-[HOSTINGER-VPS.md](HOSTINGER-VPS.md)** — one script, about 30 minutes, roughly
-£5/month, everything staying with Hostinger.
-
-Alternatives: [FREE-HOSTING.md](FREE-HOSTING.md) for £0 routes (Oracle Cloud
-Always Free, or a machine you already own behind a Cloudflare Tunnel), or
-[DEPLOYMENT.md](DEPLOYMENT.md) for Fly.io.
-
-> Hostinger's *shared* plans run PHP and MySQL and cannot run this application —
-> it needs a persistent Node.js process. A VPS is the same provider and the same
-> bill, and runs it unchanged.
+- **`php-app/`** — pure PHP + SQLite, built to run on ordinary shared hosting
+  with nothing to install. **This is the production route: see
+  [SHARED-HOSTING.md](SHARED-HOSTING.md)** to put it on the Hostinger plan you
+  already have at `invoice.cerviz.co.uk`, for £0 extra. A ready-to-upload
+  bundle is committed at `dist/cerviz-invoice.zip`.
+- **`server/` + `core/`** — the Node/TypeScript reference implementation, with
+  the full test suite. Same behaviour, byte-identical SQL migrations. Runs
+  anywhere Node runs: [HOSTINGER-VPS.md](HOSTINGER-VPS.md) (~£5/month VPS),
+  [FREE-HOSTING.md](FREE-HOSTING.md) (£0 routes), or
+  [DEPLOYMENT.md](DEPLOYMENT.md) (Fly.io).
 
 ---
 

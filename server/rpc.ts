@@ -430,6 +430,50 @@ const ops: Record<string, Operation> = {
     },
   },
 
+  'workers:issueKid': {
+    capability: 'compliance.write',
+    handler: ({ db, user }, { workerId }) => {
+      const w = db.prepare(
+        `SELECT w.*, u.name AS umbrella_name FROM workers w
+         LEFT JOIN organisations u ON u.id = w.umbrella_org_id WHERE w.id = ?`,
+      ).get(workerId) as any;
+      if (!w) throw new Error('Worker not found');
+      const c = db.prepare('SELECT * FROM company WHERE id = 1').get() as any;
+      const version = ((db.prepare('SELECT MAX(version) AS v FROM key_information_documents WHERE worker_id = ?')
+        .get(workerId) as any)?.v ?? 0) + 1;
+      const rate = w.default_pay_rate_pence
+        ? `£${(w.default_pay_rate_pence / 100).toFixed(2)} per hour`
+        : 'as agreed per assignment';
+      const html = `
+        <h2>Key Information Document</h2>
+        <p>Provided under the Conduct of Employment Agencies and Employment Businesses
+           Regulations 2003. This is not a contract of employment.</p>
+        <table>
+          <tr><th>Employment business</th><td>${c?.legal_name ?? 'Cerviz Ltd'}${c?.company_number ? ` (company no. ${c.company_number})` : ''}</td></tr>
+          <tr><th>Your name</th><td>${w.first_name} ${w.last_name}</td></tr>
+          <tr><th>Type of contract</th><td>${w.engagement_type === 'umbrella' ? 'Supplied via an umbrella company' : w.engagement_type === 'paye' ? 'Contract for services, PAYE' : 'Off-payroll engagement'}</td></tr>
+          <tr><th>Who pays you</th><td>${w.umbrella_name ?? c?.legal_name ?? 'Cerviz Ltd'}</td></tr>
+          <tr><th>Rate of pay</th><td>${rate}</td></tr>
+          <tr><th>How often you are paid</th><td>Weekly, following approval of your timesheet</td></tr>
+          <tr><th>Statutory deductions</th><td>Income tax and National Insurance are deducted by whoever operates PAYE on your pay.</td></tr>
+          <tr><th>Holiday entitlement</th><td>Statutory holiday, accruing at 12.07% of hours worked.</td></tr>
+          <tr><th>Issued on</th><td>${today()}</td></tr>
+        </table>`;
+      const id = newId('kid');
+      db.prepare(
+        `INSERT INTO key_information_documents (id, worker_id, version, issued_on, issued_by,
+           engagement_type, pay_rate_pence, umbrella_org_id, content_html, created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      ).run(id, workerId, version, today(), user.name, w.engagement_type,
+        w.default_pay_rate_pence ?? null, w.umbrella_org_id ?? null, html, nowInstant());
+      recordAudit(db, {
+        entityType: 'worker', entityId: workerId, action: 'kid_issued',
+        summary: `Key Information Document version ${version} issued`, actor: user.id,
+      });
+      return { id, version, html };
+    },
+  },
+
   'workers:setScreening': {
     capability: 'compliance.write',
     handler: ({ db, user }, { workerId, element, status, ...opts }) => {
@@ -691,6 +735,11 @@ const ops: Record<string, Operation> = {
 
   'invoices:get': { capability: 'invoices.read', readOnly: true, handler: ({ db }, { id }) => invoices.invoiceWithDetail(db, id) },
   'invoices:createFromTimesheets': { capability: 'invoices.write', handler: ({ db }, payload) => invoices.createInvoiceFromTimesheets(db, payload) },
+  'invoices:createManual': { capability: 'invoices.write', handler: ({ db }, payload) => invoices.createManualInvoice(db, payload) },
+  'invoices:addLine': { capability: 'invoices.write', handler: ({ db }, { invoiceId, line }) => invoices.addManualLine(db, invoiceId, line) },
+  'invoices:updateLine': { capability: 'invoices.write', handler: ({ db }, { invoiceId, lineId, changes }) => { invoices.updateInvoiceLine(db, invoiceId, lineId, changes); return true; } },
+  'invoices:removeLine': { capability: 'invoices.write', handler: ({ db }, { invoiceId, lineId }) => { invoices.removeInvoiceLine(db, invoiceId, lineId); return true; } },
+  'invoices:updateDraft': { capability: 'invoices.write', handler: ({ db }, { id, changes }) => { invoices.updateDraftInvoice(db, id, changes); return invoices.invoiceWithDetail(db, id); } },
 
   'invoices:issue': {
     capability: 'invoices.issue',
