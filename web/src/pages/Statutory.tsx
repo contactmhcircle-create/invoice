@@ -75,6 +75,8 @@ export default function Statutory({ onChange }: { onChange: () => void }) {
         </div>
       )}
 
+      <DocumentHub />
+
       <div className="card">
         <div className="card-head">
           <div className="card-title">Employment intermediaries quarterly report</div>
@@ -276,5 +278,112 @@ function EnquiryPack({ onClose }: { onClose: () => void }) {
         </>
       )}
     </Modal>
+  );
+}
+
+/**
+ * The instant-documents hub: every register or pack a UK department,
+ * inspector or auditor is likely to ask a security labour supplier for,
+ * generated from live records in one click. Print gives PDF via the
+ * browser; CSV opens in any spreadsheet.
+ */
+const HUB_DOCUMENTS: Array<{
+  key: string; asker: string; title: string; detail: string;
+  html: string; csv?: string; needsRange?: boolean;
+}> = [
+  {
+    key: 'sia_deployment', asker: 'SIA / ACS inspection',
+    title: 'Officer deployment register',
+    detail: 'Who was deployed where, on which licence, on which dates.',
+    html: '/api/registers/sia_deployment', csv: '/api/registers/sia_deployment?format=csv', needsRange: true,
+  },
+  {
+    key: 'rtw', asker: 'Home Office',
+    title: 'Right-to-work check register',
+    detail: 'The statutory excuse log — every check, method, checker and re-check date.',
+    html: '/api/registers/rtw', csv: '/api/registers/rtw?format=csv',
+  },
+  {
+    key: 'screening', asker: 'BS 7858 audit / client procurement',
+    title: 'Screening register',
+    detail: 'Every worker’s screening elements and completion state.',
+    html: '/api/registers/screening', csv: '/api/registers/screening?format=csv',
+  },
+  {
+    key: 'kid', asker: 'EAS inspectorate (Conduct Regulations)',
+    title: 'Key Information Document register',
+    detail: 'Every KID issued, its version, date and issuer.',
+    html: '/api/registers/kid', csv: '/api/registers/kid?format=csv',
+  },
+  {
+    key: 'sales', asker: 'HMRC / your accountant',
+    title: 'Sales ledger export',
+    detail: 'Every invoice in the period as CSV, matching the gapless series.',
+    html: '', csv: '/api/exports/sales.csv', needsRange: true,
+  },
+  {
+    key: 'ledger', asker: 'HMRC / your accountant',
+    title: 'Full ledger export',
+    detail: 'Every double-entry journal line in the period as CSV.',
+    html: '', csv: '/api/exports/ledger.csv', needsRange: true,
+  },
+];
+
+function DocumentHub() {
+  const [from, setFrom] = useState(addDays(todayIso(), -90));
+  const [to, setTo] = useState(todayIso());
+
+  const open = (base: string) => {
+    if (!base) return;
+    const sep = base.includes('?') ? '&' : '?';
+    openDocument(`${base}${sep}from=${from}&to=${to}`);
+  };
+
+  return (
+    <div className="card">
+      <div className="card-head">
+        <div className="card-title">Instant documents — if anyone official asks</div>
+      </div>
+      <div className="card-body">
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Each document is generated from the live records at the moment you click, stamped with the
+          generation time. Print / save PDF uses the browser; CSV opens in any spreadsheet. The HMRC
+          enquiry pack (top right) covers a full enquiry; these are the single registers departments
+          ask for day to day.
+        </p>
+        <div className="grid cols-2" style={{ marginBottom: 12 }}>
+          <Field label="Period from (for dated registers)">
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+          <Field label="Period to">
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Who asks</th><th>Document</th><th></th></tr>
+          </thead>
+          <tbody>
+            {HUB_DOCUMENTS.map((d) => (
+              <tr key={d.key}>
+                <td className="small muted nowrap">{d.asker}</td>
+                <td>
+                  <strong>{d.title}</strong>
+                  <div className="small muted">{d.detail}</div>
+                </td>
+                <td className="nowrap" style={{ textAlign: 'right' }}>
+                  {d.html && <button className="btn small" onClick={() => open(d.html)}>Print / PDF</button>}{' '}
+                  {d.csv && <button className="btn small" onClick={() => open(d.csv!)}>CSV</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="chain-note">
+        Not stored copies — every generation reads the records as they stand, so the document can
+        never disagree with the system it came from.
+      </div>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, call, money, ukDate, todayIso } from '../lib/api.js';
+import { useQuery, call, apiGet, money, ukDate, todayIso } from '../lib/api.js';
 import { Loading, Empty, Modal, Status, Field, MoneyInput, ErrorNote, Confirm } from '../components/ui.js';
 
 const CHAIN_ROLES = [
@@ -471,8 +471,30 @@ function EditChain({
 function AddOrg({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState<any>({ is_client: true, payment_terms_days: 30, country: 'United Kingdom' });
   const [error, setError] = useState<string | null>(null);
+  const [chStatus, setChStatus] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
   const set = (k: string) => (e: any) =>
     setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
+
+  const autofill = async () => {
+    try {
+      setError(null);
+      if (!form.company_number?.trim()) throw new Error('Enter the company number first, then auto-fill.');
+      setFetching(true);
+      const d = await apiGet<any>(`/api/companies-house/${encodeURIComponent(form.company_number.trim())}`);
+      setForm({
+        ...form,
+        company_number: d.companyNumber,
+        name: form.name || d.name,
+        legal_name: d.name,
+        address_1: d.address.line1 ?? form.address_1,
+        address_2: d.address.line2 ?? form.address_2,
+        city: d.address.city ?? form.city,
+        postcode: d.address.postcode ?? form.postcode,
+      });
+      setChStatus(d.status);
+    } catch (e: any) { setError(e.message); } finally { setFetching(false); }
+  };
 
   const save = async () => {
     try {
@@ -489,13 +511,28 @@ function AddOrg({ onClose, onDone }: { onClose: () => void; onDone: () => void }
       footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={save}>Add</button></>}
     >
       <ErrorNote error={error} />
-      <Field label="Name"><input type="text" onChange={set('name')} autoFocus /></Field>
       <div className="grid cols-2">
-        <Field label="Company number" hint="Verify it on Companies House and record the check.">
-          <input type="text" onChange={set('company_number')} />
+        <Field label="Company number" hint="Auto-fill pulls the registered details straight from Companies House.">
+          <input type="text" value={form.company_number ?? ''} onChange={set('company_number')} autoFocus />
         </Field>
-        <Field label="VAT number"><input type="text" onChange={set('vat_number')} /></Field>
+        <Field label="&nbsp;">
+          <button className="btn" onClick={autofill} disabled={fetching}>
+            {fetching ? 'Fetching…' : 'Auto-fill from Companies House'}
+          </button>
+        </Field>
       </div>
+      {chStatus && chStatus !== 'active' && (
+        <div className="alert danger">
+          <strong>Companies House lists this company as {chStatus.replace(/-/g, ' ')}</strong>
+          Supplying staff to a non-active company is a due diligence red flag — check before trading.
+        </div>
+      )}
+      {chStatus === 'active' && (
+        <div className="alert ok"><strong>Active at Companies House</strong>
+          Registered details filled in below — a due diligence check worth recording once saved.</div>
+      )}
+      <Field label="Name"><input type="text" value={form.name ?? ''} onChange={set('name')} /></Field>
+      <Field label="VAT number"><input type="text" value={form.vat_number ?? ''} onChange={set('vat_number')} /></Field>
       <Field label="Roles">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           <label className="checkbox"><input type="checkbox" checked={!!form.is_client} onChange={set('is_client')} /> Client we supply</label>
@@ -514,9 +551,9 @@ function AddOrg({ onClose, onDone }: { onClose: () => void; onDone: () => void }
         </Field>
       </div>
       <Field label="Address">
-        <input type="text" placeholder="Line 1" onChange={set('address_1')} style={{ marginBottom: 6 }} />
-        <input type="text" placeholder="City" onChange={set('city')} style={{ marginBottom: 6 }} />
-        <input type="text" placeholder="Postcode" onChange={set('postcode')} />
+        <input type="text" placeholder="Line 1" value={form.address_1 ?? ''} onChange={set('address_1')} style={{ marginBottom: 6 }} />
+        <input type="text" placeholder="City" value={form.city ?? ''} onChange={set('city')} style={{ marginBottom: 6 }} />
+        <input type="text" placeholder="Postcode" value={form.postcode ?? ''} onChange={set('postcode')} />
       </Field>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <label className="checkbox"><input type="checkbox" onChange={set('self_bills_us')} /> They self-bill us</label>

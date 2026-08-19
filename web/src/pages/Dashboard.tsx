@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery, money, ukDate, todayIso } from '../lib/api.js';
 import { Loading, Empty } from '../components/ui.js';
+import { ColumnChart, LineChart } from '../components/charts.js';
 
 /**
  * The dashboard answers one question: what needs attention today. Everything on
@@ -8,6 +9,8 @@ import { Loading, Empty } from '../components/ui.js';
  */
 export default function Dashboard({ summary }: { summary: any; onChange: () => void }) {
   const { data, loading } = useQuery<any>('dashboard:summary');
+  const { data: risks } = useQuery<any[]>('dashboard:risks');
+  const { data: analytics } = useQuery<any>('dashboard:analytics');
   const s = data ?? summary;
 
   if (loading && !s) return <Loading />;
@@ -93,6 +96,59 @@ export default function Dashboard({ summary }: { summary: any; onChange: () => v
           <div className="tile-label">AWR 12-week clock</div>
           <div className="tile-value">{s.awrQualified}</div>
           <div className="tile-note">{s.awrApproaching} more approaching week 12</div>
+        </div>
+      </div>
+
+      {analytics?.months && (
+        <div className="grid cols-2">
+          <div className="card">
+            <div className="card-head"><div className="card-title">Invoiced per month</div></div>
+            <div className="card-body">
+              <ColumnChart
+                points={analytics.months.map((m: any) => ({ label: m.month, values: [m.invoicedPence] }))}
+                seriesName="Invoiced (net)"
+              />
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-head"><div className="card-title">Charge vs pay per month</div></div>
+            <div className="card-body">
+              <LineChart
+                points={analytics.months.map((m: any) => ({ label: m.month, values: [m.chargePence, m.payPence] }))}
+                seriesNames={['Charged to clients', 'Paid for labour']}
+              />
+            </div>
+            <div className="chain-note">The gap between the lines is the gross margin, from approved timesheets.</div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-head">
+          <div className="card-title">Risk monitor</div>
+          {risks && <span className="small muted">{risks.length ? `${risks.length} finding(s)` : 'all clear'}</span>}
+        </div>
+        <div className="card-body tight">
+          {!risks ? <Loading /> : risks.length === 0 ? (
+            <Empty>Nothing needs attention — every monitored risk is clear.</Empty>
+          ) : (
+            <div>
+              {risks.map((r, i) => (
+                <div key={i} className={`finding ${r.severity === 'critical' ? 'blocker' : r.severity === 'warning' ? 'warning' : 'info'}`}>
+                  <div className="finding-title">
+                    <span className={`badge ${r.severity === 'critical' ? 'red' : r.severity === 'warning' ? 'amber' : 'grey'}`}>{r.area}</span>{' '}
+                    {r.title}
+                  </div>
+                  <div className="finding-detail">{r.detail} <strong>{r.action}</strong></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="chain-note">
+          Re-checked on every load, straight from the records: licences, right to work, AWR, minimum wage,
+          VAT threshold, debtors, unbilled work, evidence gaps, supply chains, due diligence, duplicates
+          and filing deadlines. Every finding is a query you could re-run — nothing is a guess.
         </div>
       </div>
 

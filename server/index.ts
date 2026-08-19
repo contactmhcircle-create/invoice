@@ -13,6 +13,7 @@ import type { Db } from '../core/db/connection.js';
 import { recordAudit } from '../core/db/audit.js';
 import { attachDocument } from '../core/services/documents.js';
 import { renderInvoiceHtml, invoiceLinesCsv } from '../core/services/invoiceDocument.js';
+import { buildRegister, renderRegisterHtml, registerCsv } from '../core/services/registers.js';
 import { buildEnquiryPack, renderEnquiryPackHtml } from '../core/services/enquiryPack.js';
 import { importTideStatement, exportLedgerCsv, exportSalesCsv } from '../core/services/tide.js';
 import { generateIntermediaryReport, intermediaryReportCsv, markIntermediaryReportSubmitted } from '../core/services/statutory.js';
@@ -258,6 +259,71 @@ app.get('/api/invoices/:id/document', async (request, reply) => {
     return renderInvoiceHtml(db, id);
   } catch (err) {
     return reply.code(404).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get('/api/registers/:type', async (request, reply) => {
+  if (!requireCapability(request, reply, 'statutory.read')) return;
+  const { type } = request.params as { type: string };
+  const { from, to, format = 'html' } = request.query as { from?: string; to?: string; format?: string };
+  try {
+    const reg = buildRegister(db, type, from, to);
+    if (format === 'csv') {
+      reply.type('text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${type}-register.csv"`);
+      return registerCsv(reg);
+    }
+    reply.type('text/html; charset=utf-8');
+    return renderRegisterHtml(db, reg);
+  } catch (err) {
+    return reply.code(400).send({ ok: false, error: (err as Error).message });
+  }
+});
+
+/**
+ * Companies House lookup for auto-filling counterparty records. Uses the free
+ * official API; the key lives in settings and never reaches the browser.
+ */
+app.get('/api/companies-house/:number', async (request, reply) => {
+  if (!requireCapability(request, reply, 'clients.read')) return;
+  const raw = String((request.params as any).number).trim().toUpperCase();
+  if (!/^[A-Z0-9]{2,10}$/.test(raw)) {
+    return reply.code(400).send({ ok: false, error: 'Enter a company number, e.g. 09985380.' });
+  }
+  const key = (db.prepare(`SELECT value FROM settings WHERE key = 'companies_house_api_key'`).get() as any)?.value;
+  if (!key) {
+    return reply.code(400).send({
+      ok: false,
+      error: 'No Companies House API key is set. Get a free key at developer.company-information.service.gov.uk and save it under Settings.',
+    });
+  }
+  try {
+    const res = await fetch(`https://api.company-information.service.gov.uk/company/${raw.padStart(8, '0')}`, {
+      headers: { Authorization: `Basic ${Buffer.from(`${key}:`).toString('base64')}` },
+    });
+    if (res.status === 404) return reply.code(404).send({ ok: false, error: 'No company found with that number.' });
+    if (res.status === 401) return reply.code(400).send({ ok: false, error: 'Companies House rejected the API key. Check it under Settings.' });
+    if (!res.ok) return reply.code(502).send({ ok: false, error: `Companies House returned ${res.status}. Try again shortly.` });
+    const d = (await res.json()) as any;
+    return {
+      ok: true,
+      data: {
+        companyNumber: d.company_number,
+        name: d.company_name,
+        status: d.company_status,
+        type: d.type,
+        incorporatedOn: d.date_of_creation ?? null,
+        sicCodes: d.sic_codes ?? [],
+        address: {
+          line1: d.registered_office_address?.address_line_1 ?? null,
+          line2: d.registered_office_address?.address_line_2 ?? null,
+          city: d.registered_office_address?.locality ?? null,
+          postcode: d.registered_office_address?.postal_code ?? null,
+        },
+      },
+    };
+  } catch {
+    return reply.code(502).send({ ok: false, error: 'Could not reach Companies House. Check the server\'s internet access.' });
   }
 });
 

@@ -106,6 +106,14 @@ In the app, open **Settings** and fill in:
 - Invoice numbering is already set to CRV-INV-year-sequence and is gapless;
   you don't need to touch it.
 
+Optional but worth two minutes: **Companies House auto-fill**. Create a free
+account at developer.company-information.service.gov.uk, register an
+application, and paste its REST API key into Settings → Company → Companies
+House API key. From then on, adding any client or umbrella is: type the
+company number, click auto-fill — the registered name and office fill in,
+and a dissolved or struck-off company is flagged in red before you trade
+with it.
+
 Then add your other admins under **Users & access** — each person gets their
 own login, role (owner / compliance / scheduler / finance / read-only) and
 their own two-factor. Never share one login.

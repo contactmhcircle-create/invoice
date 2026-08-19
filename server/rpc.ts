@@ -16,6 +16,8 @@ import * as numbering from '../core/services/numbering.js';
 import * as tide from '../core/services/tide.js';
 import * as documents from '../core/services/documents.js';
 import * as deletion from '../core/services/deletion.js';
+import * as insights from '../core/services/insights.js';
+import { buildRegister } from '../core/services/registers.js';
 import { buildEnquiryPack } from '../core/services/enquiryPack.js';
 import { backupDatabase, listBackups } from '../core/services/backup.js';
 import { join as joinPath } from 'node:path';
@@ -835,6 +837,34 @@ const ops: Record<string, Operation> = {
   'selfBills:reconcile': { capability: 'purchases.read', handler: ({ db }, { id }) => purchases.reconcileSelfBill(db, id) },
 
   // --- Reporting -----------------------------------------------------------
+  'dashboard:analytics': { capability: 'reports.read', readOnly: true, handler: ({ db }) => insights.dashboardAnalytics(db) },
+  'dashboard:risks': { capability: 'authenticated', readOnly: true, handler: ({ db }) => insights.riskRadar(db) },
+  'registers:build': {
+    capability: 'statutory.read', readOnly: true, maskPii: true,
+    handler: ({ db }, { type, from, to }) => buildRegister(db, type, from, to),
+  },
+
+  'settings:get': {
+    capability: 'settings.read', readOnly: true,
+    handler: ({ db }, { key }) => {
+      if (!SETTING_KEYS.includes(key)) throw new Error('Unknown setting.');
+      return (db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as any)?.value ?? null;
+    },
+  },
+  'settings:set': {
+    capability: 'settings.write',
+    handler: ({ db, user }, { key, value }) => {
+      if (!SETTING_KEYS.includes(key)) throw new Error('Unknown setting.');
+      db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?)
+                  ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, String(value ?? ''));
+      recordAudit(db, {
+        entityType: 'setting', entityId: key, action: 'updated',
+        summary: `Setting ${key} updated`, actor: user.id,
+      });
+      return true;
+    },
+  },
+
   'reports:margin': { capability: 'reports.read', readOnly: true, handler: ({ db }, { from, to }) => purchases.marginReport(db, from, to) },
   'reports:trialBalance': { capability: 'reports.read', readOnly: true, handler: ({ db }, payload = {}) => ledger.trialBalance(db, payload.asOf) },
   'reports:profitAndLoss': { capability: 'reports.read', readOnly: true, handler: ({ db }, { from, to }) => ledger.profitAndLoss(db, from, to) },
@@ -949,6 +979,9 @@ const ops: Record<string, Operation> = {
 export class AuthorisationError extends Error {
   statusCode = 403;
 }
+
+/** Settings editable through the generic get/set ops — a whitelist, not a free store. */
+const SETTING_KEYS = ['companies_house_api_key', 'boe_base_rate'];
 
 export function listOperations(): string[] {
   return Object.keys(ops);

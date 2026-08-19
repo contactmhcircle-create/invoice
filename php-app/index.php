@@ -39,6 +39,7 @@ require __DIR__ . '/app/services/ops.php';
 require __DIR__ . '/app/services/money.php';
 require __DIR__ . '/app/services/records.php';
 require __DIR__ . '/app/services/render.php';
+require __DIR__ . '/app/services/insights.php';
 require __DIR__ . '/app/rpc.php';
 
 const COOKIE_NAME = 'cerviz_session';
@@ -342,6 +343,29 @@ if (preg_match('#^/api/invoices/([A-Za-z0-9_]+)/document$#', $path, $m)) {
         fail($e->getMessage(), 404);
     }
     exit;
+}
+
+if (preg_match('#^/api/registers/([a-z_]+)$#', $path, $m)) {
+    require_capability($db, $method, 'statutory.read');
+    try {
+        $reg = build_register($db, $m[1], $_GET['from'] ?? null, $_GET['to'] ?? null);
+        if (($_GET['format'] ?? 'html') === 'csv') {
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $m[1] . '-register.csv"');
+            echo register_csv($reg);
+        } else {
+            header('Content-Type: text/html; charset=utf-8');
+            echo render_register_html($db, $reg);
+        }
+    } catch (DomainException $e) {
+        fail($e->getMessage());
+    }
+    exit;
+}
+
+if (preg_match('#^/api/companies-house/([A-Za-z0-9]+)$#', $path, $m)) {
+    require_capability($db, $method, 'clients.read');
+    ok(companies_house_lookup($db, $m[1]));
 }
 
 if ($path === '/api/enquiry-pack') {

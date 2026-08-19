@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 class AuthorisationError extends RuntimeException {}
 
+/** Settings editable through the generic get/set ops — a whitelist, not a free store. */
+const SETTING_KEYS = ['companies_house_api_key', 'boe_base_rate'];
+
 function rpc_registry(): array {
     static $ops = null;
     if ($ops !== null) return $ops;
@@ -663,6 +666,25 @@ function rpc_registry(): array {
         reconcile_self_bill($db, $p['id']));
 
     // --- Reporting -----------------------------------------------------------
+    $op('dashboard:analytics', 'reports.read', true, false, fn($db) => dashboard_analytics($db));
+    $op('dashboard:risks', 'authenticated', true, false, fn($db) => risk_radar($db));
+    $op('registers:build', 'statutory.read', true, true, fn($db, $user, $p) =>
+        build_register($db, $p['type'], $p['from'] ?? null, $p['to'] ?? null));
+
+    $op('settings:get', 'settings.read', true, false, function ($db, $user, $p) {
+        if (!in_array($p['key'] ?? '', SETTING_KEYS, true)) throw new DomainException('Unknown setting.');
+        return scalar($db, 'SELECT value FROM settings WHERE key = ?', [$p['key']]);
+    });
+    $op('settings:set', 'settings.write', false, false, function ($db, $user, $p) {
+        if (!in_array($p['key'] ?? '', SETTING_KEYS, true)) throw new DomainException('Unknown setting.');
+        q($db, 'INSERT INTO settings (key, value) VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+            [$p['key'], (string) ($p['value'] ?? '')]);
+        record_audit($db, ['entityType' => 'setting', 'entityId' => $p['key'], 'action' => 'updated',
+            'summary' => "Setting {$p['key']} updated", 'actor' => $user['id']]);
+        return true;
+    });
+
     $op('reports:margin', 'reports.read', true, false, fn($db, $user, $p) =>
         margin_report($db, $p['from'], $p['to']));
     $op('reports:trialBalance', 'reports.read', true, false, fn($db, $user, $p) =>

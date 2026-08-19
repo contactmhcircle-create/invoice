@@ -55,6 +55,11 @@ export async function call<T = any>(channel: string, payload?: unknown): Promise
   });
 }
 
+/** GET against a JSON API route (session-authenticated, e.g. the Companies House lookup). */
+export async function apiGet<T = any>(path: string): Promise<T> {
+  return request<T>(path, { method: 'GET' });
+}
+
 // ---------------------------------------------------------------------------
 // Authentication
 // ---------------------------------------------------------------------------

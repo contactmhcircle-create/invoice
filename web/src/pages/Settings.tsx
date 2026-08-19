@@ -164,6 +164,8 @@ export default function Settings({ onChange }: { onChange: () => void }) {
               <textarea value={form.invoice_terms ?? ''} onChange={set('invoice_terms')} />
             </Field>
             <Field label="Invoice footer"><input type="text" value={form.invoice_footer ?? ''} onChange={set('invoice_footer')} /></Field>
+            <div className="divider" />
+            <CompaniesHouseKey />
           </div>
         </div>
       )}
@@ -236,6 +238,42 @@ export default function Settings({ onChange }: { onChange: () => void }) {
         </>
       )}
     </div>
+  );
+}
+
+function CompaniesHouseKey() {
+  const { data: current, refresh } = useQuery<string | null>('settings:get', { key: 'companies_house_api_key' });
+  const [value, setValue] = useState('');
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async () => {
+    try {
+      await call('settings:set', { key: 'companies_house_api_key', value: value.trim() });
+      setSaved(true); setValue(''); refresh();
+    } catch (e: any) { setError(e.message); }
+  };
+
+  return (
+    <>
+      <ErrorNote error={error} />
+      <Field
+        label="Companies House API key"
+        hint="Enables one-click auto-fill of counterparty records from the official register. The key is free: create an account at developer.company-information.service.gov.uk, register an application, and paste its REST API key here. It is stored on your server and never sent to the browser."
+      >
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="password"
+            value={value}
+            placeholder={current ? 'A key is saved — paste a new one to replace it' : 'Paste the API key'}
+            onChange={(e) => { setValue(e.target.value); setSaved(false); }}
+            style={{ flex: 1 }}
+          />
+          <button className="btn" onClick={save} disabled={!value.trim()}>Save key</button>
+        </div>
+        {saved && <div className="small" style={{ color: 'var(--ok)', marginTop: 4 }}>Saved.</div>}
+      </Field>
+    </>
   );
 }
 
