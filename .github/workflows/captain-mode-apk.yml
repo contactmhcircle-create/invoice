@@ -1,0 +1,54 @@
+name: Captain Mode APK
+
+on:
+  push:
+    branches:
+      - claude/car-bluetooth-announcements-2zrya6
+    paths:
+      - 'captain-mode/**'
+      - '.github/workflows/captain-mode-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: captain-mode
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Build release APK
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Stage APK
+        run: cp app/build/outputs/apk/release/app-release.apk captain-mode.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: captain-mode-apk
+          path: captain-mode/captain-mode.apk
+
+      - name: Publish latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: captain-mode-latest
+          name: Captain Mode — latest build
+          body: |
+            Latest Captain Mode APK, built automatically from the newest code.
+
+            **Install on your phone:** download `captain-mode.apk` below, open it,
+            and allow installing from your browser when Android asks.
+          prerelease: false
+          files: captain-mode/captain-mode.apk
