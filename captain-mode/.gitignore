@@ -1,0 +1,12 @@
+# The parent repo ignores any "data/" directory — re-include our Kotlin package.
+!app/src/main/java/com/captainmode/app/data/
+
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
