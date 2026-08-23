@@ -100,6 +100,14 @@ class AnnouncementService : Service() {
     private suspend fun announceConnect(config: AppConfig, car: CarProfile?, isTest: Boolean) {
         val weatherJob = scope.async { WeatherClient.fetchForConfig(this@AnnouncementService, config) }
 
+        if (!isTest && config.waitForCarAudio) {
+            val routed = waitForBluetoothAudio(config.carAudioTimeoutSeconds * 1000L)
+            if (!routed && !config.playOnPhoneIfNoCarAudio) {
+                weatherJob.cancel()
+                return
+            }
+        }
+
         val delaySec = if (isTest) 0.5f else (car?.delaySeconds ?: 3.5f)
         delay((delaySec * 1000).toLong())
 
@@ -183,6 +191,25 @@ class AnnouncementService : Service() {
         }
     }
 
+    /**
+     * Polls until an actual Bluetooth audio output (A2DP or hearing-aid class
+     * device) is available, i.e. the car's audio system has finished booting.
+     * Returns true once routing is live, false on timeout.
+     */
+    private suspend fun waitForBluetoothAudio(timeoutMs: Long): Boolean {
+        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val routed = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                        it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+            }
+            if (routed) return true
+            delay(1000)
+        }
+        return false
+    }
+
     private fun batteryPercent(): Int? {
         val bm = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
@@ -214,7 +241,9 @@ class AnnouncementService : Service() {
         const val EVENT_TEST = "test"
         private const val NOTIFICATION_ID = 41
 
-        private const val DEDUPE_WINDOW_MS = 20_000L
+        // Head units fire several connect events while their audio system
+        // boots (ACL first, A2DP up to ~30s later) — treat them as one.
+        private const val DEDUPE_WINDOW_MS = 90_000L
         private val lastHandled = HashMap<String, Long>()
 
         @Synchronized

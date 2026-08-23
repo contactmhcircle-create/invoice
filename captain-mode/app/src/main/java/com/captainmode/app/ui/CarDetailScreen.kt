@@ -110,18 +110,18 @@ fun CarDetailScreen(nav: NavController, carId: String) {
             SectionHeader("Timing & volume")
             SettingsCard {
                 SliderRow(
-                    title = "Delay after connect",
+                    title = "Extra delay before speaking",
                     valueLabel = "${"%.1f".format(car.delaySeconds)} s",
                     value = car.delaySeconds,
-                    range = 0f..12f,
-                    steps = 23,
+                    range = 0f..20f,
+                    steps = 39,
                     onChangeFinished = { v ->
                         ConfigRepository.updateCar(carId) { it.copy(delaySeconds = v) }
                     }
                 )
                 Text(
-                    "Cars need a moment after pairing before they route audio. " +
-                            "If the first words get cut off, increase this.",
+                    "Applied after the car's audio system is up (see Settings → Car audio). " +
+                            "If the first words still get cut off, increase this.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)

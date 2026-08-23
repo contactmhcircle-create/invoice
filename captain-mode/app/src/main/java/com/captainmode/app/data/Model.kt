@@ -93,6 +93,12 @@ data class AppConfig(
     val announceOnDisconnect: Boolean = false,
     val announceUnknownDevices: Boolean = false,
 
+    // Wait until audio actually routes to Bluetooth before speaking —
+    // many head units take 15-20s to boot their audio system after pairing.
+    val waitForCarAudio: Boolean = true,
+    val carAudioTimeoutSeconds: Int = 45,
+    val playOnPhoneIfNoCarAudio: Boolean = false,
+
     val chime: ChimeConfig = ChimeConfig(),
     val voice: VoiceConfig = VoiceConfig(),
     val library: PhraseLibrary = PhraseLibrary(),

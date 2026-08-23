@@ -203,6 +203,40 @@ fun SettingsScreen(nav: NavController) {
                 }
             }
 
+            SectionHeader("Car audio")
+            SettingsCard {
+                SwitchRow(
+                    title = "Wait for car speakers",
+                    subtitle = "Hold the announcement until audio actually routes to " +
+                            "Bluetooth — head units can take 15–20 s to boot",
+                    checked = config.waitForCarAudio,
+                    onChecked = { on ->
+                        ConfigRepository.update { it.copy(waitForCarAudio = on) }
+                    }
+                )
+                if (config.waitForCarAudio) {
+                    SliderRow(
+                        title = "Give up after",
+                        valueLabel = "${config.carAudioTimeoutSeconds} s",
+                        value = config.carAudioTimeoutSeconds.toFloat(),
+                        range = 10f..120f,
+                        onChangeFinished = { v ->
+                            ConfigRepository.update {
+                                it.copy(carAudioTimeoutSeconds = v.toInt())
+                            }
+                        }
+                    )
+                    SwitchRow(
+                        title = "Play on phone if car audio never appears",
+                        subtitle = "Off = stay silent instead of speaking from the phone",
+                        checked = config.playOnPhoneIfNoCarAudio,
+                        onChecked = { on ->
+                            ConfigRepository.update { it.copy(playOnPhoneIfNoCarAudio = on) }
+                        }
+                    )
+                }
+            }
+
             SectionHeader("Behaviour")
             SettingsCard {
                 SwitchRow(
